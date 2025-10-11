@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Madopic - Markdown to Picture</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg?v=20250906">
+    <link rel="apple-touch-icon" href="madopic.png?v=20250906">
+    <meta name="theme-color" content="#6366f1">
+    <meta name="description" content="精美的 Markdown 转图片工具，轻松制作社交媒体图片">
+    <link rel="manifest" href="manifest.json?v=20250906">
+    <link rel="stylesheet" href="style.css?v=20250906">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- KaTeX CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <!-- KaTeX JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+    <!-- KaTeX mhchem extension for chemistry -->
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/mhchem.min.js"></script>
+    <!-- Mermaid JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <!-- ECharts JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <!-- jsPDF for PDF export -->
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+</head>
+<body>
+    <div class="app">
+        <!-- 顶部工具栏 -->
+        <div class="toolbar">
+            <div class="toolbar-left">
+                <h1><img src="favicon.svg" alt="Madopic" class="app-icon"> Madopic</h1>
+                <span class="subtitle">Markdown to Picture 🎨✨</span>
+            </div>
+            <div class="toolbar-right">
+                <div class="mode-group" id="modeGroup" title="导出模式">
+                    <button class="btn btn-secondary btn-toggle active" id="modeFreeBtn" data-mode="free">
+                        <i class="fas fa-expand"></i>
+                        <span>自由</span>
+                    </button>
+                    <button class="btn btn-secondary btn-toggle" id="modeXhsBtn" data-mode="xhs">
+                        <i class="fas fa-book"></i>
+                        <span>小红书</span>
+                    </button>
+                    <button class="btn btn-secondary btn-toggle" id="modePyqBtn" data-mode="pyq">
+                        <i class="fas fa-users"></i>
+                        <span>朋友圈</span>
+                    </button>
+                </div>
+                <button class="btn btn-secondary" id="backgroundBtn">
+                    <i class="fas fa-palette"></i> 背景设置
+                </button>
+                <button class="btn btn-secondary" id="layoutBtn">
+                    <i class="fas fa-text-height"></i> 文字布局
+                </button>
+                <button class="btn btn-primary" id="exportPngBtn">
+                    <i class="fas fa-image"></i> 导出PNG
+                </button>
+                <button class="btn btn-primary" id="exportPdfBtn">
+                    <i class="fas fa-file-pdf"></i> 导出PDF
+                </button>
+                <button class="btn btn-primary" id="exportHtmlBtn">
+                    <i class="fas fa-file-code"></i> 导出HTML
+                </button>
+                <a href="https://github.com/xiaolinbaba/Madopic" target="_blank" class="github-link" title="查看GitHub源码">
+                    <i class="fab fa-github"></i>
+                </a>
+            </div>
+        </div>
+
+        <!-- 主要内容区域 -->
+        <div class="main-content">
+            <!-- 左侧编辑器 -->
+            <div class="editor-panel">
+                <div class="panel-header">
+                    <h3><i class="fab fa-markdown"></i> Markdown</h3>
+                    <div class="editor-tools">
+                        <button class="tool-btn" data-action="bold" title="粗体">
+                            <i class="fas fa-bold"></i>
+                        </button>
+                        <button class="tool-btn" data-action="italic" title="斜体">
+                            <i class="fas fa-italic"></i>
+                        </button>
+                        <button class="tool-btn" data-action="heading" title="标题">
+                            <i class="fas fa-heading"></i>
+                        </button>
+                        <button class="tool-btn" data-action="list" title="列表">
+                            <i class="fas fa-list"></i>
+                        </button>
+                        <button class="tool-btn" data-action="link" title="链接">
+                            <i class="fas fa-link"></i>
+                        </button>
+                        <button class="tool-btn" data-action="image" title="插入图片">
+                            <i class="fas fa-image"></i>
+                        </button>
+                        <div class="tool-separator"></div>
+                        <button class="tool-btn" data-action="flowchart" title="插入流程图">
+                            <i class="fas fa-project-diagram"></i>
+                        </button>
+                        <button class="tool-btn" data-action="sequence" title="插入序列图">
+                            <i class="fas fa-exchange-alt"></i>
+                        </button>
+                        <button class="tool-btn" data-action="gantt" title="插入甘特图">
+                            <i class="fas fa-chart-gantt"></i>
+                        </button>
+                        <button class="tool-btn" data-action="pie" title="插入饼图">
+                            <i class="fas fa-chart-pie"></i>
+                        </button>
+                        <button class="tool-btn" data-action="echarts" title="插入ECharts图表">
+                            <i class="fas fa-chart-bar"></i>
+                        </button>
+                        <div class="tool-separator"></div>
+                        <button class="tool-btn" data-action="einstein" title="插入质能守恒公式">
+                            <i class="fas fa-atom"></i>
+                        </button>
+                        <button class="tool-btn" data-action="math" title="插入数学公式">
+                            <i class="fas fa-square-root-alt"></i>
+                        </button>
+                        <button class="tool-btn" data-action="physics" title="插入物理公式">
+                            <i class="fas fa-flask"></i>
+                        </button>
+                        <button class="tool-btn" data-action="chemistry" title="插入化学公式">
+                            <i class="fas fa-vial"></i>
+                        </button>
+                        <div class="tool-separator"></div>
+                        <button class="tool-btn" data-action="card" title="插入卡片">
+                            <i class="fas fa-id-card"></i>
+                        </button>
+                        <button class="tool-btn" data-action="empty-line" title="加入空行">
+                            <i class="fas fa-paragraph"></i>
+                        </button>
+                        <button class="tool-btn" data-action="clear" title="清空">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                <!-- 隐藏的文件选择器 -->
+                <input type="file" id="imageInput" accept="image/*" style="display: none;">
+                <div class="editor-with-lines">
+                    <pre class="line-numbers" aria-hidden="true"></pre>
+                    <textarea id="markdownInput" placeholder="在这里输入你的 Markdown 内容..."># Madopic
+
+> Madopic，精美的 Markdown 转图片工具 🎨
+
+![](https://pic4.zhimg.com/v2-a342a311176f76e4120b7084d9f18db3_r.jpg)
+
+:::card info
+一个现代化的在线工具，可以将 Markdown 文本转换为精美的图片海报，适合社交媒体分享。
+:::
+
+
+## 🚀 主要功能
+
+- 将 Markdown 内容转化为图文海报
+- 可以自定义背景、字体大小和边距
+- 所见即所得，快速导出为 png 图片，pdf 文档
+- 支持本地图片，粘贴图片，网络图片
+- 支持 Mermaid，Echarts，数学公式，信息卡片等元素
+
+## 🎯 使用场景
+
+- 社交媒体，制作精美海报，信息卡片
+- 教育学习，教学课件，知识卡片
+- 商业应用，技术文档，架构图，数据展示
+- 学术科研，复杂公式，专业图表展示
+- 任何需要图片化展示的富文本内容</textarea>
+                </div>
+            </div>
+
+            <!-- 右侧预览面板 -->
+            <div class="preview-panel">
+                <div class="panel-header">
+                    <h3><i class="fas fa-eye"></i> 实时预览</h3>
+                    <div class="preview-tools">
+                        <button class="tool-btn" id="zoomOut" title="缩小">
+                            <i class="fas fa-search-minus"></i>
+                        </button>
+                        <span class="zoom-level">100%</span>
+                        <button class="tool-btn" id="zoomIn" title="放大">
+                            <i class="fas fa-search-plus"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="preview-container" id="previewContainer">
+                    <div class="preview-content" id="previewContent">
+                        <div class="markdown-poster" id="markdownPoster">
+                            <div class="poster-content" id="posterContent">
+                                <!-- Markdown 渲染内容将在这里显示 -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 背景设置面板 -->
+        <div class="background-panel" id="backgroundPanel">
+            <div class="panel-content">
+                <h3><i class="fas fa-palette"></i> 背景设置</h3>
+                
+                <div class="setting-section">
+                    <div class="option-group">
+                        <label>预设背景：</label>
+                        <div class="preset-backgrounds">
+                            <div class="bg-preset active" data-bg="gradient1"></div>
+                            <div class="bg-preset" data-bg="gradient2"></div>
+                            <div class="bg-preset" data-bg="gradient3"></div>
+                            <div class="bg-preset" data-bg="gradient4"></div>
+                            <div class="bg-preset" data-bg="gradient5"></div>
+                            <div class="bg-preset" data-bg="gradient6"></div>
+                            <div class="bg-preset" data-bg="gradient7"></div>
+                            <div class="bg-preset" data-bg="gradient8"></div>
+                        </div>
+                    </div>
+                    <div class="option-group">
+                        <label>自定义颜色：</label>
+                        <div class="color-inputs">
+                            <div class="color-input-group">
+                                <label>起始色：</label>
+                                <input type="color" id="colorStart" value="#667eea">
+                            </div>
+                            <div class="color-input-group">
+                                <label>结束色：</label>
+                                <input type="color" id="colorEnd" value="#764ba2">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="option-group">
+                        <label>渐变方向：</label>
+                        <select id="gradientDirection">
+                            <option value="135deg">左上到右下</option>
+                            <option value="45deg">左下到右上</option>
+                            <option value="0deg">左到右</option>
+                            <option value="90deg">上到下</option>
+                            <option value="180deg">下到上</option>
+                            <option value="270deg">右到左</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="panel-actions">
+                    <button class="btn btn-secondary" id="cancelBackground">取消</button>
+                    <button class="btn btn-primary" id="applyBackground">应用</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 文字布局设置面板 -->
+        <div class="background-panel" id="layoutPanel">
+            <div class="panel-content">
+                <h3><i class="fas fa-text-height"></i> 文字布局设置</h3>
+                
+                <!-- 文字设置 -->
+                <div class="setting-section">
+                    <h4><i class="fas fa-font"></i> 文字设置</h4>
+                    <div class="option-group">
+                        <label>文字大小：</label>
+                        <div class="slider-group">
+                            <input type="range" id="fontSizeSlider" min="14" max="22" value="18" step="0.5">
+                            <span class="slider-value" id="fontSizeValue">18px</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 布局设置 -->
+                <div class="setting-section">
+                    <h4><i class="fas fa-expand-arrows-alt"></i> 布局设置</h4>
+                    <div class="option-group">
+                        <label>整体宽度：</label>
+                        <div class="slider-group">
+                            <input type="range" id="widthSlider" min="480" max="800" value="640" step="20">
+                            <span class="slider-value" id="widthValue">640px</span>
+                        </div>
+                    </div>
+                    <div class="option-group">
+                        <label>卡片边距：</label>
+                        <div class="slider-group">
+                            <input type="range" id="paddingSlider" min="20" max="60" value="40" step="2.5">
+                            <span class="slider-value" id="paddingValue">40px</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel-actions">
+                    <button class="btn btn-secondary" id="cancelLayout">取消</button>
+                    <button class="btn btn-primary" id="applyLayout">应用</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 遮罩层 -->
+        <div class="overlay" id="overlay"></div>
+    </div>
+
+    <script src="script.js?v=20250906"></script>
+</body>
+</html>
