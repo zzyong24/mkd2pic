@@ -1402,11 +1402,13 @@ async function exportToPDF() {
         const pdf = new jsPDF({
             orientation: orientation,
             unit: 'mm',
-            format: [pdfWidth, pdfHeight]
+            format: [pdfWidth, pdfHeight],
+            compress: false
         });
 
-        const imgData = outputCanvas.toDataURL('image/jpeg', 0.95);
-        pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+        // 使用 PNG 格式保持高清质量，不压缩
+        const imgData = outputCanvas.toDataURL('image/png', 1.0);
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST');
 
         pdf.save(`madopic-${getFormattedTimestamp()}.pdf`);
 
