@@ -1316,8 +1316,15 @@ async function exportToPNG() {
         const tryScales = getExportScaleCandidates(EXPORT_SCALE);
         const canvas = await renderWithFallbackScales(exportNode, targetWidth, targetHeight, tryScales);
 
-        // 固定高度模式下无需透明边裁剪，避免破坏目标尺寸；自由模式可裁剪空白
-        const trimmedCanvas = currentMode === 'free' ? trimTransparentEdges(canvas) : null;
+        // 尝试裁剪透明边缘，如果因跨域图片导致失败则跳过裁剪
+        let trimmedCanvas = null;
+        if (currentMode === 'free') {
+            try {
+                trimmedCanvas = trimTransparentEdges(canvas);
+            } catch (error) {
+                console.warn('无法裁剪透明边缘（可能包含跨域图片）:', error.message);
+            }
+        }
         const outputCanvas = trimmedCanvas || canvas;
 
         const link = document.createElement('a');
@@ -1364,7 +1371,15 @@ async function exportToPDF() {
         const tryScales = getExportScaleCandidates(EXPORT_SCALE);
         const canvas = await renderWithFallbackScales(exportNode, targetWidth, targetHeight, tryScales);
 
-        const trimmedCanvas = currentMode === 'free' ? trimTransparentEdges(canvas) : null;
+        // 尝试裁剪透明边缘，如果因跨域图片导致失败则跳过裁剪
+        let trimmedCanvas = null;
+        if (currentMode === 'free') {
+            try {
+                trimmedCanvas = trimTransparentEdges(canvas);
+            } catch (error) {
+                console.warn('无法裁剪透明边缘（可能包含跨域图片）:', error.message);
+            }
+        }
         const outputCanvas = trimmedCanvas || canvas;
 
         // 创建 PDF
