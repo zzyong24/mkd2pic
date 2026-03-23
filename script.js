@@ -911,6 +911,7 @@ function setupExportButtons() {
     const exportPngBtn = document.getElementById('exportPngBtn');
     const exportPdfBtn = document.getElementById('exportPdfBtn');
     const exportHtmlBtn = document.getElementById('exportHtmlBtn');
+    const exportMultiPngBtn = document.getElementById('exportMultiPngBtn');
 
     if (exportPngBtn) {
         exportPngBtn.addEventListener('click', exportToPNG);
@@ -922,6 +923,10 @@ function setupExportButtons() {
 
     if (exportHtmlBtn) {
         exportHtmlBtn.addEventListener('click', exportToHTML);
+    }
+
+    if (exportMultiPngBtn) {
+        exportMultiPngBtn.addEventListener('click', exportToMultiPNG);
     }
 }
 
@@ -1455,6 +1460,13 @@ async function createExactExportNode() {
         background: markdownPoster.style.background || mpComputed.background,
         transform: 'none'
     });
+
+    // 确保页眉中的头像使用绝对路径，避免导出时找不到图片
+    const headerAvatar = clone.querySelector('.poster-header .header-avatar');
+    if (headerAvatar) {
+        headerAvatar.setAttribute('crossorigin', 'anonymous');
+    }
+
     // 移除内部动画/滤镜但不改变布局
     const inner = clone.querySelector('.poster-content');
     if (inner) {
@@ -2057,7 +2069,9 @@ async function renderWithFallbackScales(node, targetWidth, targetHeight, scales)
                 scrollY: 0,
                 imageTimeout: 15000,
                 onclone: function (clonedDoc) {
-                    const clonedTarget = clonedDoc.getElementById('madopic-export-poster');
+                    // 兼容单图和多图导出的节点 ID
+                    const clonedTarget = clonedDoc.getElementById('madopic-export-poster')
+                        || clonedDoc.querySelector('[id^="madopic-export-poster-page-"]');
                     if (clonedTarget) {
                         clonedTarget.style.setProperty('position', 'absolute', 'important');
                         clonedTarget.style.setProperty('top', '0', 'important');
@@ -2749,11 +2763,482 @@ function getCurrentMadopicConfig() {
     };
 }
 
+// ===== 多图分割导出 =====
+
+/**
+ * 将 Markdown 文本按「内容块」分割，保证图片、mermaid、echarts、代码块、卡片的完整性。
+ * 返回 Markdown 片段数组。
+ *
+ * 分割策略：
+ * 1. 先将 Markdown 拆为「原子块」（不可再分的最小单元）
+ *    - 围栏代码块（```...```）—— 包含 mermaid / echarts
+ *    - 卡片块（:::card...:::）
+ *    - 标题行（# / ## / ###...）
+ *    - 图片行（![...](...) 独占一行时）
+ *    - 普通段落（以空行为界）
+ * 2. 逐块累加，当渲染高度将超过目标页高时，在上一个块结束处切割
+ * 3. 每一页都是完整的 Markdown，独立渲染为图片
+ */
+
+/**
+ * 将 Markdown 文本拆为原子块数组
+ */
+function splitMarkdownIntoAtomicBlocks(markdown) {
+    const lines = markdown.split('\n');
+    const blocks = [];
+    let current = [];
+    let inFencedBlock = false;
+    let fenceType = ''; // 'code' | 'card'
+
+    function flushCurrent() {
+        if (current.length > 0) {
+            const text = current.join('\n').trim();
+            if (text) {
+                blocks.push(text);
+            }
+            current = [];
+        }
+    }
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+
+        // 检测围栏代码块开始/结束（```mermaid, ```echarts, ```xxx）
+        if (trimmed.startsWith('```') && !inFencedBlock) {
+            flushCurrent();
+            inFencedBlock = true;
+            fenceType = 'code';
+            current.push(line);
+            continue;
+        }
+
+        if (trimmed === '```' && inFencedBlock && fenceType === 'code') {
+            current.push(line);
+            flushCurrent();
+            inFencedBlock = false;
+            fenceType = '';
+            continue;
+        }
+
+        // 检测卡片块开始（:::card）
+        if (trimmed.startsWith(':::card') && !inFencedBlock) {
+            flushCurrent();
+            inFencedBlock = true;
+            fenceType = 'card';
+            current.push(line);
+            continue;
+        }
+
+        // 检测卡片块结束（:::）
+        if (trimmed === ':::' && inFencedBlock && fenceType === 'card') {
+            current.push(line);
+            flushCurrent();
+            inFencedBlock = false;
+            fenceType = '';
+            continue;
+        }
+
+        // 在围栏块内，所有行归入当前块
+        if (inFencedBlock) {
+            current.push(line);
+            continue;
+        }
+
+        // 标题行：独立为一块（但和紧跟其后的内容合在一起）
+        if (/^#{1,6}\s/.test(trimmed)) {
+            flushCurrent();
+            current.push(line);
+            continue;
+        }
+
+        // 独占一行的图片：![...](...) 
+        if (/^!\[.*\]\(.*\)\s*$/.test(trimmed)) {
+            flushCurrent();
+            blocks.push(line.trim());
+            continue;
+        }
+
+        // 空行：段落分隔
+        if (trimmed === '') {
+            // 如果当前块不为空，结束当前块
+            if (current.length > 0 && current.some(l => l.trim() !== '')) {
+                flushCurrent();
+            }
+            continue;
+        }
+
+        // 普通行
+        current.push(line);
+    }
+
+    // 处理末尾未闭合的块
+    flushCurrent();
+
+    return blocks;
+}
+
+/**
+ * 测量一段 Markdown 渲染后的实际高度（像素）。
+ * 使用一个隐藏的离屏容器进行测量。
+ */
+async function measureMarkdownHeight(markdownText, containerWidth, padding, fontSize) {
+    // 创建测量容器
+    const measure = document.createElement('div');
+    measure.style.cssText = `
+        position: fixed; top: -99999px; left: -99999px;
+        width: ${containerWidth}px; box-sizing: border-box;
+        padding: ${padding}px;
+        font-size: ${fontSize}px;
+        visibility: hidden;
+    `;
+    // 复用 poster-content 的 class 以获取一致样式
+    measure.className = 'poster-content';
+    measure.style.minHeight = '0';
+    measure.style.animation = 'none';
+    // 确保测量容器的 padding 与 CSS 定义一致（48px），
+    // 覆盖外部传入的 padding 参数，避免测量偏差导致底部文字被裁切
+    measure.style.padding = '48px';
+
+    document.body.appendChild(measure);
+
+    // 预处理 + 渲染
+    let processed = mathRenderer.preprocessMath(markdownText);
+    processed = diagramRenderer.preprocessDiagram(processed);
+    processed = echartsRenderer.preprocessECharts(processed);
+    processed = cardRenderer.preprocessCards(processed);
+    processed = replaceImageDataForPreview(processed);
+
+    let html = '';
+    try {
+        html = marked.parse(processed);
+        html = sanitizeHTML(html);
+    } catch (e) {
+        html = `<p>${markdownText}</p>`;
+    }
+    measure.innerHTML = html;
+
+    // 渲染特殊元素
+    mathRenderer.renderMath(measure);
+    await diagramRenderer.renderDiagrams(measure);
+    await echartsRenderer.renderECharts(measure);
+    await cardRenderer.renderCards(measure);
+
+    if (typeof Prism !== 'undefined') {
+        Prism.highlightAllUnder(measure);
+    }
+
+    // 等待图片加载
+    const imgs = measure.querySelectorAll('img');
+    if (imgs.length > 0) {
+        await Promise.race([
+            Promise.allSettled(Array.from(imgs).map(img =>
+                new Promise(resolve => {
+                    if (img.complete) return resolve();
+                    img.onload = resolve;
+                    img.onerror = resolve;
+                })
+            )),
+            new Promise(r => setTimeout(r, 2000))
+        ]);
+    }
+
+    // 等一帧确保布局完成
+    await new Promise(r => requestAnimationFrame(r));
+
+    const height = measure.scrollHeight;
+
+    // 清理 ECharts 实例
+    echartsRenderer.destroyAll(measure);
+    document.body.removeChild(measure);
+
+    return height;
+}
+
+/**
+ * 智能分割 Markdown 为多页。
+ * 每页的渲染高度不超过 maxPageHeight（像素）。
+ * 页眉高度会额外预留。
+ */
+async function splitMarkdownIntoPages(markdown, maxPageHeight, containerWidth, padding, fontSize) {
+    const blocks = splitMarkdownIntoAtomicBlocks(markdown);
+    if (blocks.length === 0) return [markdown];
+
+    // 页眉高度预留（头像 36px + padding-top 14px + padding-bottom 10px）
+    const headerHeight = 60;
+    // 安全边距，防止渲染微差导致底部被裁切
+    const safetyMargin = 8;
+    const availableHeight = maxPageHeight - headerHeight - safetyMargin;
+
+    const pages = [];
+    let currentPageBlocks = [];
+    let currentPageMarkdown = '';
+
+    for (let i = 0; i < blocks.length; i++) {
+        const block = blocks[i];
+        const testMarkdown = currentPageMarkdown
+            ? currentPageMarkdown + '\n\n' + block
+            : block;
+
+        const height = await measureMarkdownHeight(testMarkdown, containerWidth, padding, fontSize);
+
+        if (height > availableHeight && currentPageBlocks.length > 0) {
+            // 当前页已满，将已有内容保存为一页
+            pages.push(currentPageMarkdown);
+            currentPageBlocks = [block];
+            currentPageMarkdown = block;
+        } else {
+            currentPageBlocks.push(block);
+            currentPageMarkdown = testMarkdown;
+        }
+    }
+
+    // 最后一页
+    if (currentPageMarkdown.trim()) {
+        pages.push(currentPageMarkdown);
+    }
+
+    return pages.length > 0 ? pages : [markdown];
+}
+
+/**
+ * 为单页 Markdown 创建一个完整的导出节点（含页眉），返回 DOM 节点。
+ * 调用方负责在使用后移除节点。
+ */
+async function createPageExportNode(markdownText, pageIndex, totalPages) {
+    // 创建外层容器（对应 markdownPoster）
+    const poster = document.createElement('div');
+    poster.id = `madopic-export-poster-page-${pageIndex}`;
+    poster.className = 'markdown-poster';
+    const mpComputed = getComputedStyle(markdownPoster);
+    Object.assign(poster.style, {
+        position: 'fixed',
+        top: '-99999px',
+        left: '-99999px',
+        margin: '0',
+        width: `${currentWidth}px`,
+        padding: mpComputed.padding,
+        boxSizing: 'border-box',
+        background: markdownPoster.style.background || mpComputed.background,
+        transform: 'none',
+        overflow: 'hidden',
+        borderRadius: '0'
+    });
+
+    // 页眉
+    const header = document.createElement('div');
+    header.className = 'poster-header';
+    const avatarImg = document.createElement('img');
+    avatarImg.src = document.querySelector('.poster-header .header-avatar')?.src || 'Portrait.png';
+    avatarImg.className = 'header-avatar';
+    avatarImg.setAttribute('crossorigin', 'anonymous');
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'header-name';
+    nameSpan.textContent = 'MoonlitClear';
+    header.appendChild(avatarImg);
+    header.appendChild(nameSpan);
+
+    // 如果有多页，添加页码
+    if (totalPages > 1) {
+        const pageNum = document.createElement('span');
+        pageNum.style.cssText = 'margin-left: auto; font-size: 12px; color: #878787; font-weight: 400;';
+        pageNum.textContent = `${pageIndex + 1} / ${totalPages}`;
+        header.appendChild(pageNum);
+    }
+
+    poster.appendChild(header);
+
+    // 内容区
+    const content = document.createElement('div');
+    content.className = 'poster-content';
+    content.style.minHeight = '0';
+    content.style.animation = 'none';
+
+    // 同步字体大小 CSS 变量
+    content.style.setProperty('--dynamic-font-size', `${currentFontSize}px`);
+    content.style.setProperty('--dynamic-h1-size', `${Math.round(currentFontSize * 1.75)}px`);
+    content.style.setProperty('--dynamic-h2-size', `${Math.round(currentFontSize * 1.375)}px`);
+    content.style.setProperty('--dynamic-h3-size', `${Math.round(currentFontSize * 1.125)}px`);
+    content.style.setProperty('--dynamic-h4-size', `${Math.round(currentFontSize * 1.05)}px`);
+    content.style.setProperty('--dynamic-h5-h6-size', `${Math.round(currentFontSize * 0.95)}px`);
+    content.style.setProperty('--dynamic-code-size', `${Math.round(currentFontSize * 0.875)}px`);
+    content.style.setProperty('--dynamic-quote-size', `${Math.round(currentFontSize * 0.95)}px`);
+
+    // 渲染 Markdown
+    let processed = mathRenderer.preprocessMath(markdownText);
+    processed = diagramRenderer.preprocessDiagram(processed);
+    processed = echartsRenderer.preprocessECharts(processed);
+    processed = cardRenderer.preprocessCards(processed);
+    processed = replaceImageDataForPreview(processed);
+
+    let html = '';
+    try {
+        html = marked.parse(processed);
+        html = sanitizeHTML(html);
+    } catch (e) {
+        html = `<p>${markdownText}</p>`;
+    }
+    content.innerHTML = html;
+
+    poster.appendChild(content);
+    document.body.appendChild(poster);
+
+    // 渲染特殊元素
+    mathRenderer.renderMath(content);
+
+    // 为 Mermaid 生成不冲突的 ID
+    const mermaidContainers = content.querySelectorAll('.mermaid-container');
+    mermaidContainers.forEach((container, idx) => {
+        container.setAttribute('data-diagram-id', `multi-mermaid-${pageIndex}-${idx}-${Date.now()}`);
+    });
+
+    await diagramRenderer.renderDiagrams(content);
+    await echartsRenderer.renderECharts(content);
+    await cardRenderer.renderCards(content);
+
+    if (typeof Prism !== 'undefined') {
+        Prism.highlightAllUnder(content);
+    }
+
+    // 等待图片和渲染完成
+    await new Promise(r => setTimeout(r, 300));
+    await new Promise(r => requestAnimationFrame(r));
+
+    return poster;
+}
+
+/**
+ * 多图导出主函数。
+ * 将 Markdown 智能分割为多页，每页独立导出为 PNG。
+ */
+async function exportToMultiPNG() {
+    try {
+        showNotification('正在分析内容并分割页面...', 'info');
+
+        // 懒加载导出库
+        await ensureExportLibsLoaded();
+
+        const markdownText = markdownInput.value.trim();
+        if (!markdownText) {
+            showNotification('没有内容可导出', 'warning');
+            return;
+        }
+
+        // 计算目标页面高度
+        // 小红书 3:4 比例：高度 = 宽度 / 3 * 4
+        const pageHeight = Math.round((currentWidth / 3) * 4);
+
+        // 内容区实际可用宽度 = 容器宽度 - 2 * padding
+        const contentWidth = currentWidth;
+
+        // 分割
+        const pages = await splitMarkdownIntoPages(
+            markdownText,
+            pageHeight,
+            contentWidth,
+            currentPadding,
+            currentFontSize
+        );
+
+        showNotification(`共分割为 ${pages.length} 页，正在生成图片...`, 'info');
+
+        const timestamp = getFormattedTimestamp();
+        const zip = new JSZip();
+        const imgFolder = zip.folder('madopic-' + timestamp);
+        let successCount = 0;
+
+        for (let i = 0; i < pages.length; i++) {
+            let exportNode = null;
+            try {
+                exportNode = await createPageExportNode(pages[i], i, pages.length);
+
+                // 图片预处理
+                try {
+                    await prepareImagesForExport(exportNode);
+                } catch (_) { }
+
+                // 等待字体
+                if (document.fonts && document.fonts.ready) {
+                    try { await document.fonts.ready; } catch (_) { }
+                }
+                await new Promise(r => requestAnimationFrame(r));
+
+                // 设置固定的 3:4 高度
+                exportNode.style.height = `${pageHeight}px`;
+                exportNode.style.minHeight = `${pageHeight}px`;
+                exportNode.style.overflow = 'hidden';
+
+                const rect = exportNode.getBoundingClientRect();
+                const targetWidth = Math.ceil(rect.width);
+                const targetHeight = Math.ceil(rect.height);
+
+                const tryScales = getExportScaleCandidates(EXPORT_SCALE);
+                const canvas = await renderWithFallbackScales(exportNode, targetWidth, targetHeight, tryScales);
+
+                // 将 canvas 转为 Blob 并加入 zip
+                let blob;
+                try {
+                    blob = await new Promise((resolve, reject) => {
+                        canvas.toBlob(b => {
+                            if (b) resolve(b);
+                            else reject(new Error('toBlob 返回 null'));
+                        }, 'image/png', 1.0);
+                    });
+                } catch (e) {
+                    console.error(`第 ${i + 1} 页图片生成失败:`, e);
+                    showNotification(`第 ${i + 1} 页生成失败：${e.message}`, 'error');
+                    continue;
+                }
+
+                const fileName = `${String(i + 1).padStart(2, '0')}.png`;
+                imgFolder.file(fileName, blob);
+                successCount++;
+
+                showNotification(`已生成 ${successCount} / ${pages.length} 页...`, 'info');
+
+            } finally {
+                if (exportNode && exportNode.parentNode) {
+                    // 清理 ECharts 实例
+                    echartsRenderer.destroyAll(exportNode);
+                    exportNode.parentNode.removeChild(exportNode);
+                }
+            }
+        }
+
+        if (successCount === 0) {
+            showNotification('所有页面生成失败，无法导出', 'error');
+            return;
+        }
+
+        // 打包 zip 并触发下载
+        showNotification('正在打包 zip...', 'info');
+        const zipBlob = await zip.generateAsync({
+            type: 'blob',
+            compression: 'DEFLATE',
+            compressionOptions: { level: 6 }
+        });
+
+        const link = document.createElement('a');
+        link.download = `madopic-${timestamp}.zip`;
+        link.href = URL.createObjectURL(zipBlob);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
+
+        showNotification(`${successCount} 张图片已打包为 zip 下载！`, 'success');
+    } catch (error) {
+        console.error('多图导出失败:', error);
+        showNotification('多图导出失败，请重试', 'error');
+    }
+}
+
 // 导出全局对象供调试使用
 window.MadopicApp = {
     updatePreview,
     exportToPNG,
     exportToPDF,
+    exportToMultiPNG,
     applyBackground,
     MarkdownHelper,
     showNotification,

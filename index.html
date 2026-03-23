@@ -10,7 +10,7 @@
     <meta name="theme-color" content="#6366f1">
     <meta name="description" content="精美的 Markdown 转图片工具，轻松制作社交媒体图片">
     <link rel="manifest" href="manifest.json?v=20260119">
-    <link rel="stylesheet" href="style.css?v=20260119">
+    <link rel="stylesheet" href="style.css?v=20260323">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <!-- KaTeX CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
@@ -27,6 +27,8 @@
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
     <!-- ECharts JavaScript -->
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <!-- JSZip - 多图打包下载 -->
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <!-- Prism.js 代码高亮 JS -->
     <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
@@ -68,13 +70,16 @@
                 <button class="btn btn-primary" id="exportPngBtn">
                     <i class="fas fa-image"></i> 导出PNG
                 </button>
+                <button class="btn btn-primary" id="exportMultiPngBtn" title="智能分割为多张图片">
+                    <i class="fas fa-images"></i> 多图导出
+                </button>
                 <button class="btn btn-primary" id="exportPdfBtn">
                     <i class="fas fa-file-pdf"></i> 导出PDF
                 </button>
                 <button class="btn btn-primary" id="exportHtmlBtn">
                     <i class="fas fa-file-code"></i> 导出HTML
                 </button>
-                <a href="https://github.com/xiaolinbaba/Madopic" target="_blank" class="github-link" title="查看GitHub源码">
+                <a href="https://github.com/zzyong24/madopic" target="_blank" class="github-link" title="查看GitHub源码">
                     <i class="fab fa-github"></i>
                 </a>
             </div>
@@ -196,6 +201,10 @@
                 <div class="preview-container" id="previewContainer">
                     <div class="preview-content" id="previewContent">
                         <div class="markdown-poster" id="markdownPoster">
+                            <div class="poster-header" id="posterHeader">
+                                <img src="Portrait.png" alt="avatar" class="header-avatar">
+                                <span class="header-name">MoonlitClear</span>
+                            </div>
                             <div class="poster-content" id="posterContent">
                                 <!-- Markdown 渲染内容将在这里显示 -->
                             </div>
@@ -304,7 +313,7 @@
         <div class="overlay" id="overlay"></div>
     </div>
 
-    <script src="script.js?v=20260119"></script>
+    <script src="script.js?v=20260323"></script>
 </body>
 
 </html>

@@ -356,6 +356,34 @@ body {
     box-sizing: border-box;
 }
 
+/* 页眉样式 — 头像 + 名字 */
+.poster-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 48px 10px 48px;
+    background: var(--background-primary);
+    border-bottom: none;
+    flex-shrink: 0;
+}
+
+.poster-header .header-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    object-fit: cover;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+    margin: 0;
+    display: inline-block;
+}
+
+.poster-header .header-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: 0.02em;
+}
+
 .poster-content {
     background: var(--background-primary) !important;
     border-radius: 0;
