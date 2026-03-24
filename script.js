@@ -2570,7 +2570,7 @@ async function exportToPNG() {
         }
 
         const link = document.createElement('a');
-        link.download = `madopic-${getFormattedTimestamp()}.png`;
+        link.download = `mkd2pic-${getFormattedTimestamp()}.png`;
         link.href = dataUrl;
         document.body.appendChild(link);
         link.click();
@@ -2694,7 +2694,7 @@ async function exportToPDF() {
 
         pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST');
 
-        pdf.save(`madopic-${getFormattedTimestamp()}.pdf`);
+        pdf.save(`mkd2pic-${getFormattedTimestamp()}.pdf`);
 
         showNotification('PDF 导出成功！', 'success');
     } catch (error) {
@@ -2744,7 +2744,7 @@ async function exportToHTML() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `madopic-${getFormattedTimestamp()}.html`;
+        a.download = `mkd2pic-${getFormattedTimestamp()}.html`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -4499,7 +4499,7 @@ async function exportToMultiPNG() {
         });
 
         const link = document.createElement('a');
-        link.download = `madopic-${timestamp}.zip`;
+        link.download = `mkd2pic-${timestamp}.zip`;
         link.href = URL.createObjectURL(zipBlob);
         document.body.appendChild(link);
         link.click();
