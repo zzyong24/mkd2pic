@@ -10,7 +10,7 @@
     <meta name="theme-color" content="#6366f1">
     <meta name="description" content="精美的 Markdown 转图片工具，轻松制作社交媒体图片">
     <link rel="manifest" href="manifest.json?v=20260119">
-    <link rel="stylesheet" href="style.css?v=20260324b">
+    <link rel="stylesheet" href="style.css?v=20260324d">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <!-- KaTeX CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
@@ -261,12 +261,20 @@
         <div class="settings-sidebar" id="settingsSidebar">
             <div class="sidebar-header">
                 <h3><i class="fas fa-cog"></i> 设置</h3>
-                <button class="tool-btn" id="closeSidebar" title="关闭设置">
-                    <i class="fas fa-times"></i>
-                </button>
+                <div class="sidebar-header-actions">
+                    <button class="btn btn-primary btn-sm" id="renderBtn" title="应用设置并刷新预览">
+                        <i class="fas fa-sync-alt"></i> 渲染
+                    </button>
+                    <button class="tool-btn" id="closeSidebar" title="关闭设置">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
             </div>
             <div class="sidebar-tabs">
-                <button class="sidebar-tab active" data-tab="header-tab">
+                <button class="sidebar-tab active" data-tab="cover-tab">
+                    <i class="fas fa-image"></i> 封面
+                </button>
+                <button class="sidebar-tab" data-tab="header-tab">
                     <i class="fas fa-heading"></i> 页眉
                 </button>
                 <button class="sidebar-tab" data-tab="footer-tab">
@@ -280,8 +288,145 @@
                 </button>
             </div>
             <div class="sidebar-body">
+                <!-- === 封面 Tab === -->
+                <div class="tab-panel active" id="cover-tab">
+                    <div class="setting-section">
+                        <div class="setting-row">
+                            <label>启用封面页</label>
+                            <label class="switch">
+                                <input type="checkbox" id="coverEnabled">
+                                <span class="switch-slider"></span>
+                            </label>
+                        </div>
+                        <p class="setting-hint">开启后在多图模式的第一张插入封面</p>
+                    </div>
+                    <div class="setting-section">
+                        <h4>主标题</h4>
+                        <textarea class="setting-input setting-textarea" id="coverTitle" rows="2" placeholder="输入封面主标题..."></textarea>
+                        <div class="option-group" style="margin-top:8px;">
+                            <label>字号</label>
+                            <div class="slider-group">
+                                <input type="range" id="coverTitleFontSize" min="28" max="80" value="48" step="1">
+                                <span class="slider-value" id="coverTitleFontSizeValue">48px</span>
+                            </div>
+                        </div>
+                        <div class="option-group">
+                            <label>颜色</label>
+                            <div class="color-picker-row">
+                                <input type="color" id="coverTitleColor" value="#1a1a2e">
+                                <span class="color-value" id="coverTitleColorValue">#1a1a2e</span>
+                            </div>
+                        </div>
+                        <div class="option-group">
+                            <label>字重</label>
+                            <select id="coverTitleWeight">
+                                <option value="400">常规</option>
+                                <option value="600">中粗</option>
+                                <option value="700" selected>粗体</option>
+                                <option value="900">特粗</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="setting-section">
+                        <h4>副标题</h4>
+                        <textarea class="setting-input setting-textarea" id="coverSubtitle" rows="2" placeholder="输入副标题（可选）..."></textarea>
+                        <div class="option-group" style="margin-top:8px;">
+                            <label>字号</label>
+                            <div class="slider-group">
+                                <input type="range" id="coverSubtitleFontSize" min="14" max="40" value="22" step="1">
+                                <span class="slider-value" id="coverSubtitleFontSizeValue">22px</span>
+                            </div>
+                        </div>
+                        <div class="option-group">
+                            <label>颜色</label>
+                            <div class="color-picker-row">
+                                <input type="color" id="coverSubtitleColor" value="#525252">
+                                <span class="color-value" id="coverSubtitleColorValue">#525252</span>
+                            </div>
+                        </div>
+                        <div class="option-group">
+                            <label>字重</label>
+                            <select id="coverSubtitleWeight">
+                                <option value="400" selected>常规</option>
+                                <option value="600">中粗</option>
+                                <option value="700">粗体</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="setting-section">
+                        <h4>字体</h4>
+                        <div class="cover-font-presets">
+                            <button class="btn btn-secondary btn-sm active" data-cover-font="system">系统默认</button>
+                            <button class="btn btn-secondary btn-sm" data-cover-font="serif">宋体/衬线</button>
+                            <button class="btn btn-secondary btn-sm" data-cover-font="mono">等宽</button>
+                            <button class="btn btn-secondary btn-sm" data-cover-font="hei">黑体</button>
+                        </div>
+                    </div>
+                    <div class="setting-section">
+                        <h4>艺术字效果</h4>
+                        <div class="cover-effect-presets">
+                            <button class="cover-effect-btn active" data-cover-effect="none">
+                                <span class="effect-preview effect-none">Aa</span>
+                                <span class="effect-label">无</span>
+                            </button>
+                            <button class="cover-effect-btn" data-cover-effect="stroke">
+                                <span class="effect-preview effect-stroke">Aa</span>
+                                <span class="effect-label">描边</span>
+                            </button>
+                            <button class="cover-effect-btn" data-cover-effect="shadow">
+                                <span class="effect-preview effect-shadow">Aa</span>
+                                <span class="effect-label">阴影</span>
+                            </button>
+                            <button class="cover-effect-btn" data-cover-effect="gradient">
+                                <span class="effect-preview effect-gradient">Aa</span>
+                                <span class="effect-label">渐变</span>
+                            </button>
+                            <button class="cover-effect-btn" data-cover-effect="neon">
+                                <span class="effect-preview effect-neon">Aa</span>
+                                <span class="effect-label">霓虹</span>
+                            </button>
+                            <button class="cover-effect-btn" data-cover-effect="emboss">
+                                <span class="effect-preview effect-emboss">Aa</span>
+                                <span class="effect-label">浮雕</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="setting-section">
+                        <h4>布局</h4>
+                        <div class="cover-layout-presets">
+                            <button class="btn btn-secondary btn-sm" data-cover-layout="top">偏上</button>
+                            <button class="btn btn-secondary btn-sm active" data-cover-layout="center">居中</button>
+                            <button class="btn btn-secondary btn-sm" data-cover-layout="bottom">偏下</button>
+                        </div>
+                        <div class="option-group" style="margin-top:8px;">
+                            <label>标题间距</label>
+                            <div class="slider-group">
+                                <input type="range" id="coverGap" min="0" max="60" value="16" step="2">
+                                <span class="slider-value" id="coverGapValue">16px</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="setting-section">
+                        <h4>页眉/页脚</h4>
+                        <div class="setting-row">
+                            <label>显示页眉</label>
+                            <label class="switch">
+                                <input type="checkbox" id="coverShowHeader" checked>
+                                <span class="switch-slider"></span>
+                            </label>
+                        </div>
+                        <div class="setting-row" style="margin-top:8px;">
+                            <label>显示页脚</label>
+                            <label class="switch">
+                                <input type="checkbox" id="coverShowFooter" checked>
+                                <span class="switch-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- === 页眉 Tab === -->
-                <div class="tab-panel active" id="header-tab">
+                <div class="tab-panel" id="header-tab">
                     <div class="setting-section">
                         <div class="setting-row">
                             <label>启用页眉</label>
@@ -551,7 +696,7 @@
         <div class="overlay" id="overlay"></div>
     </div>
 
-    <script src="script.js?v=20260324b"></script>
+    <script src="script.js?v=20260324d"></script>
 </body>
 
 </html>

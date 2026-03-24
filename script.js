@@ -60,6 +60,24 @@ const CONFIG_KEY = 'madopic_config';
  * 所有配置变更通过 saveConfig() 持久化到 localStorage
  */
 const MadopicConfig = {
+    cover: {
+        enabled: false,          // 是否启用封面页
+        title: '',               // 主标题文案
+        subtitle: '',            // 副标题文案
+        titleFontSize: 48,       // 主标题字号 28~80
+        subtitleFontSize: 22,    // 副标题字号 14~40
+        titleColor: '#1a1a2e',   // 主标题颜色
+        subtitleColor: '#525252',// 副标题颜色
+        titleWeight: '700',      // 主标题字重 400|600|700|900
+        subtitleWeight: '400',   // 副标题字重 400|600|700
+        fontFamily: 'system',    // 字体族 system|serif|mono|hand|hei
+        textEffect: 'none',     // 艺术字效果 none|stroke|shadow|gradient|neon|emboss
+        layout: 'center',       // 布局 center|top|bottom
+        gap: 16,                 // 主副标题间距 0~60
+        showHeader: true,        // 封面是否显示页眉
+        showFooter: true,        // 封面是否显示页脚
+        bgMode: 'inherit'        // 背景模式 inherit|custom（inherit 继承全局）
+    },
     header: {
         enabled: true,
         avatar: 'Portrait.png',
@@ -119,10 +137,8 @@ function saveConfig() {
     } catch (e) {
         console.warn('保存配置失败:', e);
     }
-    // 配置变更后，如果多图预览正在显示，防抖刷新预览图片
-    if (typeof scheduleMultiPreviewRefresh === 'function') {
-        scheduleMultiPreviewRefresh();
-    }
+    // 配置变更后标记需要重新渲染（不再自动触发，由用户点击「渲染」按钮手动触发）
+    _markRenderDirty();
 }
 
 /** 从 localStorage 加载配置 */
@@ -139,6 +155,29 @@ function loadConfig() {
 }
 
 // ===== 配置应用函数 =====
+
+/**
+ * 封面页的字体族 CSS class 映射表
+ * 设计决策：使用 CSS class 而非内联 style，以便在导出节点和预览中保持一致
+ */
+const COVER_FONT_CLASS_MAP = {
+    system: 'cover-font-system',
+    serif: 'cover-font-serif',
+    mono: 'cover-font-mono',
+    hei: 'cover-font-hei'
+};
+
+/**
+ * 封面页的艺术字效果 CSS class 映射表
+ */
+const COVER_EFFECT_CLASS_MAP = {
+    none: '',
+    stroke: 'text-effect-stroke',
+    shadow: 'text-effect-shadow',
+    gradient: 'text-effect-gradient',
+    neon: 'text-effect-neon',
+    emboss: 'text-effect-emboss'
+};
 
 /** 将页眉配置同步到预览区 DOM */
 function applyHeaderConfig() {
@@ -273,6 +312,31 @@ function closeSettingsSidebar() {
 /** 将当前 MadopicConfig 同步到侧边栏控件 */
 function syncSidebarFromConfig() {
     const cfg = MadopicConfig;
+    // 封面
+    _setChecked('coverEnabled', cfg.cover.enabled);
+    _setVal('coverTitle', cfg.cover.title);
+    _setVal('coverSubtitle', cfg.cover.subtitle);
+    _setRange('coverTitleFontSize', cfg.cover.titleFontSize);
+    _setRange('coverSubtitleFontSize', cfg.cover.subtitleFontSize);
+    _setColor('coverTitleColor', cfg.cover.titleColor);
+    _setColor('coverSubtitleColor', cfg.cover.subtitleColor);
+    _setVal('coverTitleWeight', cfg.cover.titleWeight);
+    _setVal('coverSubtitleWeight', cfg.cover.subtitleWeight);
+    _setRange('coverGap', cfg.cover.gap);
+    _setChecked('coverShowHeader', cfg.cover.showHeader);
+    _setChecked('coverShowFooter', cfg.cover.showFooter);
+    // 激活正确的字体按钮
+    document.querySelectorAll('[data-cover-font]').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-cover-font') === cfg.cover.fontFamily);
+    });
+    // 激活正确的效果按钮
+    document.querySelectorAll('[data-cover-effect]').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-cover-effect') === cfg.cover.textEffect);
+    });
+    // 激活正确的布局按钮
+    document.querySelectorAll('[data-cover-layout]').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-cover-layout') === cfg.cover.layout);
+    });
     // 页眉
     _setChecked('headerEnabled', cfg.header.enabled);
     _setVal('headerName', cfg.header.name);
@@ -366,11 +430,69 @@ function setupSettingsSidebar() {
     document.getElementById('closeSidebar')?.addEventListener('click', closeSettingsSidebar);
     document.getElementById('settingsBtn')?.addEventListener('click', openSettingsSidebar);
 
+    // 渲染按钮 — 手动触发预览刷新
+    document.getElementById('renderBtn')?.addEventListener('click', manualRender);
+
+    setupCoverControls();
     setupHeaderControls();
     setupFooterControls();
     setupBackgroundControls();
     setupLayoutControls();
     setupResetButton();
+}
+
+function setupCoverControls() {
+    _bindCheckbox('coverEnabled', v => { MadopicConfig.cover.enabled = v; saveConfig(); });
+    // 主标题 — textarea 使用 input 事件防抖
+    const titleEl = document.getElementById('coverTitle');
+    if (titleEl) titleEl.addEventListener('input', debounce(() => { MadopicConfig.cover.title = titleEl.value; saveConfig(); }, 200));
+    // 副标题
+    const subtitleEl = document.getElementById('coverSubtitle');
+    if (subtitleEl) subtitleEl.addEventListener('input', debounce(() => { MadopicConfig.cover.subtitle = subtitleEl.value; saveConfig(); }, 200));
+
+    _bindSlider('coverTitleFontSize', v => { MadopicConfig.cover.titleFontSize = parseInt(v); saveConfig(); });
+    _bindColor('coverTitleColor', v => { MadopicConfig.cover.titleColor = v; saveConfig(); });
+    _bindSlider('coverSubtitleFontSize', v => { MadopicConfig.cover.subtitleFontSize = parseInt(v); saveConfig(); });
+    _bindColor('coverSubtitleColor', v => { MadopicConfig.cover.subtitleColor = v; saveConfig(); });
+    _bindSlider('coverGap', v => { MadopicConfig.cover.gap = parseInt(v); saveConfig(); });
+    _bindCheckbox('coverShowHeader', v => { MadopicConfig.cover.showHeader = v; saveConfig(); });
+    _bindCheckbox('coverShowFooter', v => { MadopicConfig.cover.showFooter = v; saveConfig(); });
+
+    // 字重下拉
+    const titleWeightEl = document.getElementById('coverTitleWeight');
+    if (titleWeightEl) titleWeightEl.addEventListener('change', () => { MadopicConfig.cover.titleWeight = titleWeightEl.value; saveConfig(); });
+    const subtitleWeightEl = document.getElementById('coverSubtitleWeight');
+    if (subtitleWeightEl) subtitleWeightEl.addEventListener('change', () => { MadopicConfig.cover.subtitleWeight = subtitleWeightEl.value; saveConfig(); });
+
+    // 字体族切换
+    document.querySelectorAll('[data-cover-font]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('[data-cover-font]').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            MadopicConfig.cover.fontFamily = btn.getAttribute('data-cover-font');
+            saveConfig();
+        });
+    });
+
+    // 艺术字效果切换
+    document.querySelectorAll('[data-cover-effect]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('[data-cover-effect]').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            MadopicConfig.cover.textEffect = btn.getAttribute('data-cover-effect');
+            saveConfig();
+        });
+    });
+
+    // 布局切换
+    document.querySelectorAll('[data-cover-layout]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('[data-cover-layout]').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            MadopicConfig.cover.layout = btn.getAttribute('data-cover-layout');
+            saveConfig();
+        });
+    });
 }
 
 function setupHeaderControls() {
@@ -567,9 +689,60 @@ function _bindSlider(id, cb) {
     });
 }
 
+// ===== 手动渲染控制 =====
+// 设计决策：配置变更不再自动触发重渲染（html2canvas 很重），
+// 改为标记 dirty 状态，用户点击「渲染」按钮后才执行。
+
+let _renderDirty = false;
+
+/** 标记配置已变更，需要重新渲染。渲染按钮会显示提示状态。 */
+function _markRenderDirty() {
+    _renderDirty = true;
+    const btn = document.getElementById('renderBtn');
+    if (btn) {
+        btn.classList.add('render-dirty');
+        btn.title = '配置已变更，点击刷新预览';
+    }
+}
+
+/** 清除 dirty 标记 */
+function _clearRenderDirty() {
+    _renderDirty = false;
+    const btn = document.getElementById('renderBtn');
+    if (btn) {
+        btn.classList.remove('render-dirty');
+        btn.title = '应用设置并刷新预览';
+    }
+}
+
+/**
+ * 手动渲染：应用所有配置变更并刷新预览。
+ * 由「渲染」按钮点击触发，同时刷新单页预览和多图预览（如果打开的话）。
+ */
+function manualRender() {
+    _clearRenderDirty();
+    // 刷新单页预览（重新应用所有样式配置）
+    applyHeaderConfig();
+    applyFooterConfig();
+    applyBackgroundFromConfig();
+    applyFontSize(MadopicConfig.layout.fontSize);
+    applyWidth(MadopicConfig.layout.width);
+    applyPadding(MadopicConfig.layout.padding);
+    // 强制重新渲染 Markdown 内容
+    lastRenderedMarkdown = '';
+    updatePreview();
+    // 如果多图预览正在显示，刷新多图预览
+    const mc = document.getElementById('multiPreviewContainer');
+    if (mc && mc.style.display !== 'none' && mc.style.display !== '') {
+        _cachedPageSplitResult = null;
+        _measureHeightCache.clear();
+        openMultiPreview();
+    }
+}
+
 // ===== 多图预览系统 =====
 
-let multiPreviewPages = []; // 缓存的页面 dataURL 列表
+let multiPreviewPages = []; // 缓存的页面 Blob URL 列表
 let multiPreviewCurrentIndex = 0;
 let _multiPreviewRefreshTimer = null;
 
@@ -584,6 +757,9 @@ function scheduleMultiPreviewRefresh() {
     // 仅在多图预览可见时才刷新
     if (!mc || mc.style.display === 'none' || mc.style.display === '') return;
     if (_multiPreviewRefreshTimer) clearTimeout(_multiPreviewRefreshTimer);
+    // 配置变更时清除分页缓存，确保重新计算
+    _cachedPageSplitResult = null;
+    _measureHeightCache.clear();
     _multiPreviewRefreshTimer = setTimeout(() => {
         _multiPreviewRefreshTimer = null;
         openMultiPreview();
@@ -591,6 +767,53 @@ function scheduleMultiPreviewRefresh() {
 }
 
 let _multiPreviewRendering = false; // 并发锁，防止重叠渲染
+
+/**
+ * 释放之前缓存的 Blob URL，防止内存泄漏
+ */
+function releaseMultiPreviewPages() {
+    multiPreviewPages.forEach(url => {
+        if (url && url.startsWith('blob:')) {
+            URL.revokeObjectURL(url);
+        }
+    });
+    multiPreviewPages = [];
+}
+
+/**
+ * 渲染单页为图片 Blob URL
+ * 抽取为独立函数，供并发批处理调用
+ */
+async function renderPageToImage(pageMarkdown, pageIndex, totalPages, pageHeight, scales) {
+    let node = null;
+    try {
+        node = await createPageExportNode(pageMarkdown, pageIndex, totalPages);
+        node.style.height = `${pageHeight}px`;
+        node.style.minHeight = `${pageHeight}px`;
+        node.style.overflow = 'hidden';
+
+        await prepareImagesForExport(node);
+        if (document.fonts?.ready) try { await document.fonts.ready; } catch (_) {}
+        await new Promise(r => requestAnimationFrame(r));
+
+        const rect = node.getBoundingClientRect();
+        const canvas = await renderWithFallbackScales(node, Math.ceil(rect.width), Math.ceil(rect.height), scales);
+
+        // 使用 Blob URL 代替 base64 dataUrl，大幅降低内存占用
+        const blob = await new Promise((resolve, reject) => {
+            canvas.toBlob(b => {
+                if (b) resolve(b);
+                else reject(new Error('toBlob 返回 null'));
+            }, 'image/png', 0.85);
+        });
+        return URL.createObjectURL(blob);
+    } finally {
+        if (node?.parentNode) {
+            echartsRenderer.destroyAll(node);
+            node.parentNode.removeChild(node);
+        }
+    }
+}
 
 async function openMultiPreview() {
     const markdownText = markdownInput.value.trim();
@@ -603,7 +826,7 @@ async function openMultiPreview() {
     if (_multiPreviewRendering) return;
     _multiPreviewRendering = true;
 
-    showNotification('正在生成多图预览...', 'info');
+    showNotification('正在分析内容并分割页面...', 'info');
 
     try {
         // 确保导出库已加载
@@ -612,33 +835,69 @@ async function openMultiPreview() {
         const pageHeight = Math.round((currentWidth / 3) * 4);
         const pages = await splitMarkdownIntoPages(markdownText, pageHeight, currentWidth, currentPadding, currentFontSize);
 
-        multiPreviewPages = [];
+        // 释放之前的缓存
+        releaseMultiPreviewPages();
 
-        for (let i = 0; i < pages.length; i++) {
-            let node = null;
+        // === 封面页渲染 ===
+        let coverUrl = null;
+        const coverCfg = MadopicConfig.cover;
+        if (coverCfg.enabled && coverCfg.title) {
+            showNotification('正在生成封面页...', 'info');
+            let coverNode = null;
             try {
-                node = await createPageExportNode(pages[i], i, pages.length);
-                node.style.height = `${pageHeight}px`;
-                node.style.minHeight = `${pageHeight}px`;
-                node.style.overflow = 'hidden';
-
-                await prepareImagesForExport(node);
+                coverNode = await createCoverExportNode(pageHeight);
+                await prepareImagesForExport(coverNode);
                 if (document.fonts?.ready) try { await document.fonts.ready; } catch (_) {}
                 await new Promise(r => requestAnimationFrame(r));
 
-                const rect = node.getBoundingClientRect();
-                const canvas = await renderWithFallbackScales(node, Math.ceil(rect.width), Math.ceil(rect.height), [1.5, 1]);
-                const dataUrl = canvas.toDataURL('image/png', 0.85);
-                multiPreviewPages.push(dataUrl);
+                const rect = coverNode.getBoundingClientRect();
+                const canvas = await renderWithFallbackScales(coverNode, Math.ceil(rect.width), Math.ceil(rect.height), [1.5, 1]);
+                const blob = await new Promise((resolve, reject) => {
+                    canvas.toBlob(b => {
+                        if (b) resolve(b);
+                        else reject(new Error('toBlob 返回 null'));
+                    }, 'image/png', 0.85);
+                });
+                coverUrl = URL.createObjectURL(blob);
             } catch (e) {
-                console.error(`预览第 ${i + 1} 页失败:`, e);
+                console.error('封面页预览生成失败:', e);
+                showNotification('封面页生成失败，继续生成内容页...', 'warning');
             } finally {
-                if (node?.parentNode) {
-                    echartsRenderer.destroyAll(node);
-                    node.parentNode.removeChild(node);
-                }
+                if (coverNode?.parentNode) coverNode.parentNode.removeChild(coverNode);
             }
         }
+
+        const totalDisplay = pages.length + (coverUrl ? 1 : 0);
+        showNotification(`共 ${totalDisplay} 页，正在生成预览...`, 'info');
+
+        const BATCH_SIZE = 3; // 每批并行渲染 3 页（平衡速度与内存）
+        const results = new Array(pages.length);
+
+        for (let batchStart = 0; batchStart < pages.length; batchStart += BATCH_SIZE) {
+            const batchEnd = Math.min(batchStart + BATCH_SIZE, pages.length);
+            const batchPromises = [];
+
+            for (let i = batchStart; i < batchEnd; i++) {
+                batchPromises.push(
+                    renderPageToImage(pages[i], i, pages.length, pageHeight, [1.5, 1])
+                        .catch(e => {
+                            console.error(`预览第 ${i + 1} 页失败:`, e);
+                            return null;
+                        })
+                );
+            }
+
+            const batchResults = await Promise.all(batchPromises);
+            for (let j = 0; j < batchResults.length; j++) {
+                results[batchStart + j] = batchResults[j];
+            }
+
+            showNotification(`已生成 ${batchEnd} / ${pages.length} 页预览...`, 'info');
+        }
+
+        // 封面页插入到最前面
+        const contentPages = results.filter(Boolean);
+        multiPreviewPages = coverUrl ? [coverUrl, ...contentPages] : contentPages;
 
         if (multiPreviewPages.length === 0) {
             showNotification('多图预览生成失败', 'error');
@@ -667,6 +926,8 @@ async function openMultiPreview() {
 function closeMultiPreview() {
     document.getElementById('multiPreviewContainer').style.display = 'none';
     document.getElementById('previewContainer').style.display = '';
+    // 关闭时释放内存
+    releaseMultiPreviewPages();
 }
 
 function switchMultiPreviewMode(mode) {
@@ -696,28 +957,51 @@ function renderMultiPreviewGrid() {
     const grid = document.getElementById('multiPreviewGrid');
     if (!grid) return;
     grid.innerHTML = '';
-    multiPreviewPages.forEach((dataUrl, i) => {
-        const card = document.createElement('div');
-        card.className = 'grid-page-card';
-        card.innerHTML = `
-            <img src="${dataUrl}" alt="第 ${i + 1} 页">
-            <div class="page-label">第 ${i + 1} 页</div>
-        `;
-        card.addEventListener('click', () => {
+
+    // 使用事件委托，避免为每个 card 注册独立监听
+    grid.onclick = function (e) {
+        const card = e.target.closest('.grid-page-card');
+        if (!card) return;
+        const idx = parseInt(card.dataset.index, 10);
+        if (!isNaN(idx)) {
             switchMultiPreviewMode('carousel');
-            multiPreviewCurrentIndex = i;
+            multiPreviewCurrentIndex = idx;
             renderCarouselPage();
             renderCarouselThumbnails();
-        });
-        grid.appendChild(card);
+        }
+    };
+
+    // 使用 DocumentFragment 批量插入，减少重排
+    const fragment = document.createDocumentFragment();
+    const hasCoverPage = MadopicConfig.cover.enabled && MadopicConfig.cover.title;
+    multiPreviewPages.forEach((url, i) => {
+        const card = document.createElement('div');
+        card.className = 'grid-page-card';
+        card.dataset.index = i;
+        const img = document.createElement('img');
+        img.src = url;
+        const isCover = hasCoverPage && i === 0;
+        const pageLabel = isCover ? '封面' : `第 ${i + 1 - (hasCoverPage ? 1 : 0)} 页`;
+        img.alt = pageLabel;
+        img.loading = 'lazy'; // 浏览器原生懒加载
+        const label = document.createElement('div');
+        label.className = 'page-label';
+        label.textContent = pageLabel;
+        card.appendChild(img);
+        card.appendChild(label);
+        fragment.appendChild(card);
     });
+    grid.appendChild(fragment);
 }
 
 function renderCarouselPage() {
     const viewport = document.getElementById('carouselViewport');
     if (!viewport || multiPreviewPages.length === 0) return;
-    const dataUrl = multiPreviewPages[multiPreviewCurrentIndex];
-    viewport.innerHTML = `<img src="${dataUrl}" alt="第 ${multiPreviewCurrentIndex + 1} 页">`;
+    const url = multiPreviewPages[multiPreviewCurrentIndex];
+    const hasCoverPage = MadopicConfig.cover.enabled && MadopicConfig.cover.title;
+    const isCover = hasCoverPage && multiPreviewCurrentIndex === 0;
+    const pageLabel = isCover ? '封面' : `第 ${multiPreviewCurrentIndex + 1 - (hasCoverPage ? 1 : 0)} 页`;
+    viewport.innerHTML = `<img src="${url}" alt="${pageLabel}">`;
     // 更新缩略图高亮
     document.querySelectorAll('.carousel-thumb').forEach((t, i) => {
         t.classList.toggle('active', i === multiPreviewCurrentIndex);
@@ -728,17 +1012,33 @@ function renderCarouselThumbnails() {
     const container = document.getElementById('carouselThumbnails');
     if (!container) return;
     container.innerHTML = '';
-    multiPreviewPages.forEach((dataUrl, i) => {
+
+    // 使用事件委托
+    container.onclick = function (e) {
+        const thumb = e.target.closest('.carousel-thumb');
+        if (!thumb) return;
+        const idx = parseInt(thumb.dataset.index, 10);
+        if (!isNaN(idx)) {
+            multiPreviewCurrentIndex = idx;
+            renderCarouselPage();
+            // 更新高亮
+            container.querySelectorAll('.carousel-thumb').forEach((t, i) => {
+                t.classList.toggle('active', i === idx);
+            });
+        }
+    };
+
+    const fragment = document.createDocumentFragment();
+    multiPreviewPages.forEach((url, i) => {
         const thumb = document.createElement('img');
         thumb.className = 'carousel-thumb' + (i === multiPreviewCurrentIndex ? ' active' : '');
-        thumb.src = dataUrl;
+        thumb.src = url;
         thumb.alt = `第 ${i + 1} 页`;
-        thumb.addEventListener('click', () => {
-            multiPreviewCurrentIndex = i;
-            renderCarouselPage();
-        });
-        container.appendChild(thumb);
+        thumb.loading = 'lazy';
+        thumb.dataset.index = i;
+        fragment.appendChild(thumb);
     });
+    container.appendChild(fragment);
 }
 
 function navigateCarousel(direction) {
@@ -1565,8 +1865,7 @@ function initializeApp() {
 
 // 设置事件监听器
 function setupEventListeners() {
-    // Markdown 输入监听
-    markdownInput.addEventListener('input', debounce(updatePreview, 250));
+    // Markdown 输入监听（updatePreview 由 initOptimizations 中的 debouncedUpdatePreview 统一管理，此处只处理行号）
     markdownInput.addEventListener('input', updateLineNumbers);
     markdownInput.addEventListener('scroll', syncLineNumbersScroll);
 
@@ -2623,7 +2922,7 @@ async function renderWithFallbackScales(node, targetWidth, targetHeight, scales)
                 windowHeight: targetHeight,
                 scrollX: 0,
                 scrollY: 0,
-                imageTimeout: 15000,
+                imageTimeout: 5000,
                 onclone: function (clonedDoc) {
                     // 兼容单图和多图导出的节点 ID
                     const clonedTarget = clonedDoc.getElementById('madopic-export-poster')
@@ -2830,8 +3129,12 @@ document.addEventListener('visibilitychange', function () {
     if (document.hidden) {
         // 页面隐藏时暂停某些操作
     } else {
-        // 页面可见时恢复操作
-        updatePreview();
+        // 页面可见时仅在内容确实变化时才重渲染（避免无条件全量渲染）
+        const currentText = markdownInput?.value?.trim() || '';
+        const processed = currentText ? mathRenderer.preprocessMath(currentText) : '';
+        if (processed && processed !== lastRenderedMarkdown) {
+            updatePreview();
+        }
     }
 });
 
@@ -3437,25 +3740,49 @@ function splitMarkdownIntoAtomicBlocks(markdown) {
 
 /**
  * 测量一段 Markdown 渲染后的实际高度（像素）。
- * 使用一个隐藏的离屏容器进行测量。
+ * 【性能优化】使用缓存避免重复测量相同内容。
  */
+
+// 测量高度缓存：key = markdown + containerWidth + padding + fontSize, value = height
+const _measureHeightCache = new Map();
+const _MEASURE_CACHE_MAX = 500;
+
 async function measureMarkdownHeight(markdownText, containerWidth, padding, fontSize) {
+    // 缓存查找
+    const cacheKey = `${containerWidth}|${padding}|${fontSize}|${markdownText}`;
+    if (_measureHeightCache.has(cacheKey)) {
+        return _measureHeightCache.get(cacheKey);
+    }
+
     // 创建测量容器
+    // 【关键修复】测量单个 block 时不应包含 padding，否则每个 block 都会虚增 96px（上下各48px），
+    // 导致分页严重过度（如 144 行文章被分成 20 页）。
+    // padding 对高度的影响已在 splitMarkdownIntoPages 的 availableHeight 计算中通过
+    // posterPaddingTop/posterPaddingBottom 扣除。
     const measure = document.createElement('div');
     measure.style.cssText = `
         position: fixed; top: -99999px; left: -99999px;
         width: ${containerWidth}px; box-sizing: border-box;
-        padding: ${padding}px;
+        padding: 0;
         font-size: ${fontSize}px;
         visibility: hidden;
     `;
-    // 复用 poster-content 的 class 以获取一致样式
+    // 复用 poster-content 的 class 以获取一致样式（字体、行高、margin 等）
     measure.className = 'poster-content';
     measure.style.minHeight = '0';
     measure.style.animation = 'none';
-    // 确保测量容器的 padding 与 CSS 定义一致（48px），
-    // 覆盖外部传入的 padding 参数，避免测量偏差导致底部文字被裁切
-    measure.style.padding = '48px';
+    // 显式设置 padding 为 0，覆盖 CSS class 中的 padding: 48px
+    // 因为我们只想测量纯内容高度，padding 在分页逻辑中单独处理
+    measure.style.padding = '0';
+    // 【关键修复】同步 CSS 变量到测量容器，否则 .poster-content p/h1/h2 等
+    // 会 fallback 到 CSS 中的默认值（16px/28px/22px），导致测量字号偏小，分页后内容溢出。
+    // 实际渲染时这些变量由 applyFontSize() 设置在 posterContent 上。
+    measure.style.setProperty('--dynamic-font-size', `${fontSize}px`);
+    measure.style.setProperty('--dynamic-h1-size', `${Math.round(fontSize * 1.75)}px`);
+    measure.style.setProperty('--dynamic-h2-size', `${Math.round(fontSize * 1.375)}px`);
+    measure.style.setProperty('--dynamic-h3-size', `${Math.round(fontSize * 1.125)}px`);
+    measure.style.setProperty('--dynamic-h4-size', `${Math.round(fontSize * 1.05)}px`);
+    measure.style.setProperty('--dynamic-h5-h6-size', `${Math.round(fontSize * 0.95)}px`);
 
     document.body.appendChild(measure);
 
@@ -3509,6 +3836,12 @@ async function measureMarkdownHeight(markdownText, containerWidth, padding, font
     echartsRenderer.destroyAll(measure);
     document.body.removeChild(measure);
 
+    // 存入缓存（LRU 简易版：超限清空）
+    if (_measureHeightCache.size >= _MEASURE_CACHE_MAX) {
+        _measureHeightCache.clear();
+    }
+    _measureHeightCache.set(cacheKey, height);
+
     return height;
 }
 
@@ -3516,8 +3849,22 @@ async function measureMarkdownHeight(markdownText, containerWidth, padding, font
  * 智能分割 Markdown 为多页。
  * 每页的渲染高度不超过 maxPageHeight（像素）。
  * 页眉高度会额外预留。
+ *
+ * 【性能优化】使用增量高度估算 + 单 block 测量，而非累积内容重测量。
+ * 旧算法：每添加一个 block → 测量 currentPage + newBlock 的累积高度 → O(N) 次全量测量
+ * 新算法：每个 block 只测量一次自身高度 → 按高度累加分页 → 翻页时校准一次
  */
+
+// 分页结果缓存，供导出复用（避免重复计算）
+let _cachedPageSplitResult = null; // { key, pages }
+
 async function splitMarkdownIntoPages(markdown, maxPageHeight, containerWidth, padding, fontSize) {
+    // 检查缓存
+    const cacheKey = `${markdown.length}|${maxPageHeight}|${containerWidth}|${padding}|${fontSize}|${markdown.slice(0, 100)}|${markdown.slice(-100)}`;
+    if (_cachedPageSplitResult && _cachedPageSplitResult.key === cacheKey) {
+        return _cachedPageSplitResult.pages;
+    }
+
     const blocks = splitMarkdownIntoAtomicBlocks(markdown);
     if (blocks.length === 0) return [markdown];
 
@@ -3528,56 +3875,280 @@ async function splitMarkdownIntoPages(markdown, maxPageHeight, containerWidth, p
     const fCfg = MadopicConfig.footer;
     const footerHeight = fCfg.enabled ? (fCfg.fontSize + 4 + fCfg.paddingTop + fCfg.paddingBottom) : 0;
 
-    // 【关键修复】poster 外层有 padding（用户可调），实际可用于内容的高度需要扣除上下 padding。
-    // maxPageHeight 是 poster 的 box-sizing:border-box 总高度，
-    // 内部可用高度 = maxPageHeight - posterPaddingTop - posterPaddingBottom。
-    // 设计决策：此处读取 markdownPoster 的 computed padding，确保与导出节点一致。
-    const mpComputed = getComputedStyle(markdownPoster);
-    const posterPaddingTop = parseFloat(mpComputed.paddingTop) || 0;
-    const posterPaddingBottom = parseFloat(mpComputed.paddingBottom) || 0;
+    // 【关键修复】内容区 padding 从 .poster-content（posterContent）读取，
+    // 而非 .markdown-poster（markdownPoster），因为 48px padding 定义在 poster-content 上。
+    // 测量 block 高度时 padding=0（只测纯内容高度），所以这里必须从 availableHeight 中扣除内容区 padding。
+    const pcComputed = getComputedStyle(posterContent);
+    const contentPaddingTop = parseFloat(pcComputed.paddingTop) || 0;
+    const contentPaddingBottom = parseFloat(pcComputed.paddingBottom) || 0;
 
     // 安全边距
     const safetyMargin = 8;
-    const availableHeight = maxPageHeight - posterPaddingTop - posterPaddingBottom - headerHeight - footerHeight - safetyMargin;
+    const availableHeight = maxPageHeight - contentPaddingTop - contentPaddingBottom - headerHeight - footerHeight - safetyMargin;
 
-    // 【关键修复】测量容器宽度应与导出节点中 .poster-content 的实际宽度一致。
-    // 导出节点：poster(width=containerWidth, padding=posterPadding, box-sizing:border-box)
-    //   → 内部空间 = containerWidth - 2 * posterPadding
-    // .poster-content 在这个内部空间中，自身 CSS padding=48px 由 measureMarkdownHeight 内部硬编码。
-    // 因此测量容器宽度 = containerWidth - 2 * posterPadding（poster 外层 padding 吃掉的宽度）
-    const posterPaddingLeft = parseFloat(mpComputed.paddingLeft) || 0;
-    const posterPaddingRight = parseFloat(mpComputed.paddingRight) || 0;
-    const measureWidth = containerWidth - posterPaddingLeft - posterPaddingRight;
+    // 测量容器宽度：扣除内容区左右 padding，确保与实际渲染宽度一致
+    const contentPaddingLeft = parseFloat(pcComputed.paddingLeft) || 0;
+    const contentPaddingRight = parseFloat(pcComputed.paddingRight) || 0;
+    const measureWidth = containerWidth - contentPaddingLeft - contentPaddingRight;
 
+    // 段落间距估算值（两个 block 之间 margin 合并后的典型高度）
+    const blockGap = 16;
+
+    // 阶段一：测量每个 block 的独立高度（每个 block 只测一次）
+    const blockHeights = [];
+    for (let i = 0; i < blocks.length; i++) {
+        const h = await measureMarkdownHeight(blocks[i], measureWidth, padding, fontSize);
+        blockHeights.push(h);
+    }
+
+    // 阶段二：按高度累加分页
     const pages = [];
     let currentPageBlocks = [];
-    let currentPageMarkdown = '';
+    let currentHeight = 0;
 
     for (let i = 0; i < blocks.length; i++) {
-        const block = blocks[i];
-        const testMarkdown = currentPageMarkdown
-            ? currentPageMarkdown + '\n\n' + block
-            : block;
+        const gap = currentPageBlocks.length > 0 ? blockGap : 0;
+        const newHeight = currentHeight + gap + blockHeights[i];
 
-        const height = await measureMarkdownHeight(testMarkdown, measureWidth, padding, fontSize);
-
-        if (height > availableHeight && currentPageBlocks.length > 0) {
-            // 当前页已满，将已有内容保存为一页
-            pages.push(currentPageMarkdown);
-            currentPageBlocks = [block];
-            currentPageMarkdown = block;
+        if (newHeight > availableHeight && currentPageBlocks.length > 0) {
+            // 当前页已满，保存并开始新页
+            pages.push(currentPageBlocks.join('\n\n'));
+            currentPageBlocks = [blocks[i]];
+            currentHeight = blockHeights[i];
         } else {
-            currentPageBlocks.push(block);
-            currentPageMarkdown = testMarkdown;
+            currentPageBlocks.push(blocks[i]);
+            currentHeight = newHeight;
         }
     }
 
     // 最后一页
-    if (currentPageMarkdown.trim()) {
-        pages.push(currentPageMarkdown);
+    if (currentPageBlocks.length > 0) {
+        pages.push(currentPageBlocks.join('\n\n'));
     }
 
-    return pages.length > 0 ? pages : [markdown];
+    // 阶段三：校准 — 对每页实际整页测量，确保不溢出
+    // 【改进】重切分时使用整页测量而非 blockGap 估算，彻底消除 margin 差异导致的溢出
+    const finalPages = [];
+    let carry = ''; // 上一页溢出的内容
+
+    for (let i = 0; i < pages.length; i++) {
+        const pageContent = carry ? carry + '\n\n' + pages[i] : pages[i];
+        carry = '';
+
+        const actualHeight = await measureMarkdownHeight(pageContent, measureWidth, padding, fontSize);
+
+        if (actualHeight <= availableHeight + safetyMargin) {
+            finalPages.push(pageContent);
+        } else {
+            // 页面溢出 — 逐 block 重新切分，每次添加 block 后整页测量验证
+            const pageBlocks = splitMarkdownIntoAtomicBlocks(pageContent);
+            let fitBlocks = [];
+
+            for (let j = 0; j < pageBlocks.length; j++) {
+                // 尝试将当前 block 加入
+                const candidateBlocks = [...fitBlocks, pageBlocks[j]];
+                const candidateContent = candidateBlocks.join('\n\n');
+                const candidateHeight = await measureMarkdownHeight(candidateContent, measureWidth, padding, fontSize);
+
+                if (candidateHeight > availableHeight && fitBlocks.length > 0) {
+                    // 加入后溢出 — 保存当前页，当前 block 开始新的切分
+                    finalPages.push(fitBlocks.join('\n\n'));
+                    fitBlocks = [pageBlocks[j]];
+                } else {
+                    fitBlocks.push(pageBlocks[j]);
+                }
+            }
+
+            if (fitBlocks.length > 0) {
+                // 剩余的 block 进入下一页的 carry
+                if (i < pages.length - 1) {
+                    carry = fitBlocks.join('\n\n');
+                } else {
+                    finalPages.push(fitBlocks.join('\n\n'));
+                }
+            }
+        }
+    }
+
+    // 处理最后的 carry
+    if (carry) {
+        finalPages.push(carry);
+    }
+
+    const result = finalPages.length > 0 ? finalPages : [markdown];
+
+    // 缓存分页结果
+    _cachedPageSplitResult = { key: cacheKey, pages: result };
+
+    return result;
+}
+
+/**
+ * 创建封面页的导出节点。
+ * 封面页结构：poster（背景）> header（可选）> cover-content（标题+副标题）> footer（可选）
+ * 设计决策：封面页不参与 Markdown 内容渲染，只显示用户配置的标题文案和视觉效果。
+ */
+async function createCoverExportNode(pageHeight) {
+    const coverCfg = MadopicConfig.cover;
+    const hCfg = MadopicConfig.header;
+    const fCfg = MadopicConfig.footer;
+    const bgCfg = MadopicConfig.background;
+
+    // 外层容器
+    const poster = document.createElement('div');
+    poster.id = 'madopic-export-poster-cover';
+    poster.className = 'markdown-poster';
+    const mpComputed = getComputedStyle(markdownPoster);
+    Object.assign(poster.style, {
+        position: 'fixed',
+        top: '-99999px',
+        left: '-99999px',
+        margin: '0',
+        width: `${currentWidth}px`,
+        height: `${pageHeight}px`,
+        minHeight: `${pageHeight}px`,
+        padding: mpComputed.padding,
+        boxSizing: 'border-box',
+        background: markdownPoster.style.background || mpComputed.background,
+        transform: 'none',
+        overflow: 'hidden',
+        borderRadius: '0',
+        display: 'flex',
+        flexDirection: 'column'
+    });
+
+    // 背景图层
+    if (bgCfg.type === 'image' && bgCfg.imageData) {
+        const bgLayer = document.createElement('div');
+        bgLayer.className = 'poster-bg-image';
+        bgLayer.style.backgroundImage = `url(${bgCfg.imageData})`;
+        bgLayer.style.filter = `blur(${bgCfg.imageBlur}px)`;
+        bgLayer.style.opacity = bgCfg.imageOpacity;
+        const expand = Math.max(bgCfg.imageBlur * 2, 20);
+        bgLayer.style.top = `-${expand}px`;
+        bgLayer.style.left = `-${expand}px`;
+        bgLayer.style.right = `-${expand}px`;
+        bgLayer.style.bottom = `-${expand}px`;
+        poster.appendChild(bgLayer);
+    }
+
+    // 页眉（可选）
+    if (coverCfg.showHeader && hCfg.enabled) {
+        const header = document.createElement('div');
+        header.className = 'poster-header';
+        header.style.paddingTop = hCfg.paddingTop + 'px';
+        header.style.paddingBottom = hCfg.paddingBottom + 'px';
+        const avatarImg = document.createElement('img');
+        avatarImg.src = hCfg.avatar || 'Portrait.png';
+        avatarImg.className = 'header-avatar';
+        avatarImg.setAttribute('crossorigin', 'anonymous');
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'header-name';
+        nameSpan.textContent = hCfg.name;
+        nameSpan.style.color = hCfg.nameColor;
+        header.appendChild(avatarImg);
+        header.appendChild(nameSpan);
+        poster.appendChild(header);
+    }
+
+    // 封面内容区
+    const coverArea = document.createElement('div');
+    coverArea.className = 'poster-cover';
+    coverArea.setAttribute('data-layout', coverCfg.layout);
+    coverArea.style.flex = '1';
+    coverArea.style.gap = coverCfg.gap + 'px';
+
+    // 字体族 class
+    const fontClass = COVER_FONT_CLASS_MAP[coverCfg.fontFamily] || COVER_FONT_CLASS_MAP.system;
+
+    // 主标题
+    if (coverCfg.title) {
+        const titleEl = document.createElement('div');
+        titleEl.className = `cover-title ${fontClass}`;
+        const effectClass = COVER_EFFECT_CLASS_MAP[coverCfg.textEffect] || '';
+        if (effectClass) titleEl.classList.add(effectClass);
+        titleEl.textContent = coverCfg.title;
+        Object.assign(titleEl.style, {
+            fontSize: coverCfg.titleFontSize + 'px',
+            color: coverCfg.titleColor,
+            fontWeight: coverCfg.titleWeight
+        });
+        coverArea.appendChild(titleEl);
+    }
+
+    // 副标题
+    if (coverCfg.subtitle) {
+        const subtitleEl = document.createElement('div');
+        subtitleEl.className = `cover-subtitle ${fontClass}`;
+        subtitleEl.textContent = coverCfg.subtitle;
+        Object.assign(subtitleEl.style, {
+            fontSize: coverCfg.subtitleFontSize + 'px',
+            color: coverCfg.subtitleColor,
+            fontWeight: coverCfg.subtitleWeight
+        });
+        coverArea.appendChild(subtitleEl);
+    }
+
+    poster.appendChild(coverArea);
+
+    // 页脚（可选）
+    if (coverCfg.showFooter && fCfg.enabled) {
+        const footer = document.createElement('div');
+        footer.className = 'poster-footer';
+        footer.style.cssText = `
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: ${fCfg.paddingTop}px 48px ${fCfg.paddingBottom}px 48px;
+            flex-shrink: 0;
+            gap: 8px;
+        `;
+
+        if (fCfg.showDivider) {
+            const lineLeft = document.createElement('span');
+            lineLeft.style.cssText = `flex: 1; height: 1px; background: linear-gradient(to left, ${hexToRgba(fCfg.dividerColor, 0.3)}, transparent);`;
+            footer.appendChild(lineLeft);
+        }
+
+        const sloganText = document.createElement('span');
+        sloganText.textContent = fCfg.text;
+        sloganText.style.cssText = `
+            font-size: ${fCfg.fontSize}px;
+            color: ${fCfg.textColor};
+            letter-spacing: ${fCfg.letterSpacing * 0.1}em;
+            white-space: nowrap;
+            font-weight: 400;
+        `;
+        footer.appendChild(sloganText);
+
+        if (fCfg.showDivider) {
+            const lineRight = document.createElement('span');
+            lineRight.style.cssText = `flex: 1; height: 1px; background: linear-gradient(to right, ${hexToRgba(fCfg.dividerColor, 0.3)}, transparent);`;
+            footer.appendChild(lineRight);
+        }
+
+        poster.appendChild(footer);
+    }
+
+    document.body.appendChild(poster);
+
+    // 等待头像加载
+    const imgs = poster.querySelectorAll('img');
+    if (imgs.length > 0) {
+        await Promise.race([
+            Promise.allSettled(Array.from(imgs).map(img =>
+                new Promise(resolve => {
+                    if (img.complete) return resolve();
+                    img.onload = resolve;
+                    img.onerror = resolve;
+                })
+            )),
+            new Promise(r => setTimeout(r, 500))
+        ]);
+    }
+    await new Promise(r => requestAnimationFrame(r));
+
+    return poster;
 }
 
 /**
@@ -3746,8 +4317,20 @@ async function createPageExportNode(markdownText, pageIndex, totalPages) {
         Prism.highlightAllUnder(content);
     }
 
-    // 等待图片和渲染完成
-    await new Promise(r => setTimeout(r, 300));
+    // 等待图片加载完成（代替固定 300ms 等待，大幅减少多页场景的累积等待时间）
+    const imgs = content.querySelectorAll('img');
+    if (imgs.length > 0) {
+        await Promise.race([
+            Promise.allSettled(Array.from(imgs).map(img =>
+                new Promise(resolve => {
+                    if (img.complete) return resolve();
+                    img.onload = resolve;
+                    img.onerror = resolve;
+                })
+            )),
+            new Promise(r => setTimeout(r, 500))
+        ]);
+    }
     await new Promise(r => requestAnimationFrame(r));
 
     return poster;
@@ -3756,6 +4339,10 @@ async function createPageExportNode(markdownText, pageIndex, totalPages) {
 /**
  * 多图导出主函数。
  * 将 Markdown 智能分割为多页，每页独立导出为 PNG。
+ * 【性能优化】
+ * - 复用 splitMarkdownIntoPages 的缓存结果（如果预览已分过页）
+ * - 批处理并发渲染（每批 2 页，导出 scale 更高所以比预览少）
+ * - 逐批写入 ZIP，减少内存峰值
  */
 async function exportToMultiPNG() {
     try {
@@ -3777,7 +4364,7 @@ async function exportToMultiPNG() {
         // 内容区实际可用宽度 = 容器宽度 - 2 * padding
         const contentWidth = currentWidth;
 
-        // 分割
+        // 分割（会自动命中缓存，如果配置未变化）
         const pages = await splitMarkdownIntoPages(
             markdownText,
             pageHeight,
@@ -3786,69 +4373,116 @@ async function exportToMultiPNG() {
             currentFontSize
         );
 
-        showNotification(`共分割为 ${pages.length} 页，正在生成图片...`, 'info');
-
         const timestamp = getFormattedTimestamp();
         const zip = new JSZip();
         const imgFolder = zip.folder('madopic-' + timestamp);
         let successCount = 0;
 
-        for (let i = 0; i < pages.length; i++) {
-            let exportNode = null;
+        // === 封面页导出 ===
+        const coverCfg = MadopicConfig.cover;
+        const hasCover = coverCfg.enabled && coverCfg.title;
+        // 文件序号偏移：有封面时内容页从 02 开始，否则从 01 开始
+        const fileIndexOffset = hasCover ? 1 : 0;
+
+        if (hasCover) {
+            showNotification('正在生成封面页...', 'info');
+            let coverNode = null;
             try {
-                exportNode = await createPageExportNode(pages[i], i, pages.length);
-
-                // 图片预处理
-                try {
-                    await prepareImagesForExport(exportNode);
-                } catch (_) { }
-
-                // 等待字体
-                if (document.fonts && document.fonts.ready) {
-                    try { await document.fonts.ready; } catch (_) { }
-                }
+                coverNode = await createCoverExportNode(pageHeight);
+                try { await prepareImagesForExport(coverNode); } catch (_) { }
+                if (document.fonts?.ready) try { await document.fonts.ready; } catch (_) { }
                 await new Promise(r => requestAnimationFrame(r));
 
-                // 设置固定的 3:4 高度
-                exportNode.style.height = `${pageHeight}px`;
-                exportNode.style.minHeight = `${pageHeight}px`;
-                exportNode.style.overflow = 'hidden';
-
-                const rect = exportNode.getBoundingClientRect();
-                const targetWidth = Math.ceil(rect.width);
-                const targetHeight = Math.ceil(rect.height);
-
                 const tryScales = getExportScaleCandidates(EXPORT_SCALE);
-                const canvas = await renderWithFallbackScales(exportNode, targetWidth, targetHeight, tryScales);
-
-                // 将 canvas 转为 Blob 并加入 zip
-                let blob;
-                try {
-                    blob = await new Promise((resolve, reject) => {
-                        canvas.toBlob(b => {
-                            if (b) resolve(b);
-                            else reject(new Error('toBlob 返回 null'));
-                        }, 'image/png', 1.0);
-                    });
-                } catch (e) {
-                    console.error(`第 ${i + 1} 页图片生成失败:`, e);
-                    showNotification(`第 ${i + 1} 页生成失败：${e.message}`, 'error');
-                    continue;
-                }
-
-                const fileName = `${String(i + 1).padStart(2, '0')}.png`;
-                imgFolder.file(fileName, blob);
+                const rect = coverNode.getBoundingClientRect();
+                const canvas = await renderWithFallbackScales(coverNode, Math.ceil(rect.width), Math.ceil(rect.height), tryScales);
+                const blob = await new Promise((resolve, reject) => {
+                    canvas.toBlob(b => {
+                        if (b) resolve(b);
+                        else reject(new Error('toBlob 返回 null'));
+                    }, 'image/png', 1.0);
+                });
+                imgFolder.file('01.png', blob);
                 successCount++;
-
-                showNotification(`已生成 ${successCount} / ${pages.length} 页...`, 'info');
-
+            } catch (e) {
+                console.error('封面页导出失败:', e);
+                showNotification('封面页生成失败，继续导出内容页...', 'warning');
             } finally {
-                if (exportNode && exportNode.parentNode) {
-                    // 清理 ECharts 实例
-                    echartsRenderer.destroyAll(exportNode);
-                    exportNode.parentNode.removeChild(exportNode);
+                if (coverNode?.parentNode) coverNode.parentNode.removeChild(coverNode);
+            }
+        }
+
+        const totalDisplay = pages.length + (hasCover ? 1 : 0);
+        showNotification(`共 ${totalDisplay} 页，正在生成图片...`, 'info');
+
+        const BATCH_SIZE = 2; // 导出 scale 更高，每批并行 2 页以控制内存
+        const tryScales = getExportScaleCandidates(EXPORT_SCALE);
+
+        for (let batchStart = 0; batchStart < pages.length; batchStart += BATCH_SIZE) {
+            const batchEnd = Math.min(batchStart + BATCH_SIZE, pages.length);
+            const batchPromises = [];
+
+            for (let i = batchStart; i < batchEnd; i++) {
+                batchPromises.push(
+                    (async (pageIdx) => {
+                        let exportNode = null;
+                        try {
+                            exportNode = await createPageExportNode(pages[pageIdx], pageIdx, pages.length);
+
+                            // 图片预处理
+                            try { await prepareImagesForExport(exportNode); } catch (_) { }
+
+                            // 等待字体
+                            if (document.fonts?.ready) try { await document.fonts.ready; } catch (_) { }
+                            await new Promise(r => requestAnimationFrame(r));
+
+                            // 设置固定的 3:4 高度
+                            exportNode.style.height = `${pageHeight}px`;
+                            exportNode.style.minHeight = `${pageHeight}px`;
+                            exportNode.style.overflow = 'hidden';
+
+                            const rect = exportNode.getBoundingClientRect();
+                            const targetWidth = Math.ceil(rect.width);
+                            const targetHeight = Math.ceil(rect.height);
+
+                            const canvas = await renderWithFallbackScales(exportNode, targetWidth, targetHeight, tryScales);
+
+                            // 将 canvas 转为 Blob
+                            const blob = await new Promise((resolve, reject) => {
+                                canvas.toBlob(b => {
+                                    if (b) resolve(b);
+                                    else reject(new Error('toBlob 返回 null'));
+                                }, 'image/png', 1.0);
+                            });
+
+                            return { pageIdx, blob };
+                        } catch (e) {
+                            console.error(`第 ${pageIdx + 1} 页图片生成失败:`, e);
+                            return { pageIdx, blob: null, error: e };
+                        } finally {
+                            if (exportNode?.parentNode) {
+                                echartsRenderer.destroyAll(exportNode);
+                                exportNode.parentNode.removeChild(exportNode);
+                            }
+                        }
+                    })(i)
+                );
+            }
+
+            const batchResults = await Promise.all(batchPromises);
+
+            // 逐批写入 ZIP（封面页占用 01，内容页从 02 开始）
+            for (const result of batchResults) {
+                if (result.blob) {
+                    const fileName = `${String(result.pageIdx + 1 + fileIndexOffset).padStart(2, '0')}.png`;
+                    imgFolder.file(fileName, result.blob);
+                    successCount++;
+                } else if (result.error) {
+                    showNotification(`第 ${result.pageIdx + 1} 页生成失败`, 'error');
                 }
             }
+
+            showNotification(`已生成 ${Math.min(batchEnd, pages.length) + fileIndexOffset} / ${totalDisplay} 页...`, 'info');
         }
 
         if (successCount === 0) {
@@ -3882,6 +4516,7 @@ async function exportToMultiPNG() {
 // 导出全局对象供调试使用
 window.MadopicApp = {
     updatePreview,
+    manualRender,
     exportToPNG,
     exportToPDF,
     exportToMultiPNG,

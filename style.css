@@ -744,6 +744,47 @@ body {
     gap: 8px;
 }
 
+.sidebar-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* 渲染按钮 */
+#renderBtn {
+    font-size: 12px;
+    padding: 5px 12px;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+#renderBtn i {
+    transition: transform 0.3s ease;
+}
+
+#renderBtn:hover i {
+    transform: rotate(180deg);
+}
+
+/* 配置已变更时的脉冲提示 */
+#renderBtn.render-dirty {
+    animation: renderPulse 1.5s ease-in-out infinite;
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4);
+}
+
+@keyframes renderPulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4);
+    }
+    70% {
+        box-shadow: 0 0 0 6px rgba(99, 102, 241, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
+    }
+}
+
 .sidebar-tabs {
     display: flex;
     border-bottom: 1px solid var(--border-primary);
@@ -1323,6 +1364,205 @@ select {
 
 ::-webkit-scrollbar-thumb:hover {
     background: #94a3b8;
+}
+
+/* ===== 封面页样式 ===== */
+
+/* 封面内容区 — 替代 poster-content，占满页眉和页脚之间 */
+.poster-cover {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 48px;
+    position: relative;
+    z-index: 1;
+    overflow: hidden;
+}
+
+/* 布局变体 */
+.poster-cover[data-layout="center"] {
+    justify-content: center;
+}
+
+.poster-cover[data-layout="top"] {
+    justify-content: flex-start;
+    padding-top: 80px;
+}
+
+.poster-cover[data-layout="bottom"] {
+    justify-content: flex-end;
+    padding-bottom: 80px;
+}
+
+/* 封面标题 */
+.cover-title {
+    text-align: center;
+    line-height: 1.25;
+    word-break: break-word;
+    max-width: 100%;
+    white-space: pre-wrap;
+}
+
+.cover-subtitle {
+    text-align: center;
+    line-height: 1.5;
+    word-break: break-word;
+    max-width: 100%;
+    opacity: 0.85;
+    white-space: pre-wrap;
+}
+
+/* ===== 字体族 ===== */
+.cover-font-system { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }
+.cover-font-serif  { font-family: 'Noto Serif SC', 'STSong', 'SimSun', 'Source Han Serif SC', serif; }
+.cover-font-mono   { font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Courier New', monospace; }
+.cover-font-hei    { font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Source Han Sans SC', sans-serif; }
+
+/* ===== 艺术字效果 ===== */
+
+/* 描边 */
+.text-effect-stroke {
+    -webkit-text-stroke: 2px currentColor;
+    color: transparent !important;
+    paint-order: stroke fill;
+}
+
+/* 阴影 */
+.text-effect-shadow {
+    text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.3), 0 0 2px rgba(0, 0, 0, 0.1);
+}
+
+/* 渐变填充 */
+.text-effect-gradient {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent !important;
+}
+
+/* 霓虹 */
+.text-effect-neon {
+    text-shadow:
+        0 0 7px rgba(99, 102, 241, 0.8),
+        0 0 10px rgba(99, 102, 241, 0.6),
+        0 0 21px rgba(99, 102, 241, 0.4),
+        0 0 42px rgba(99, 102, 241, 0.2);
+}
+
+/* 浮雕 */
+.text-effect-emboss {
+    text-shadow:
+        -1px -1px 0 rgba(255, 255, 255, 0.6),
+        1px 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+/* ===== 封面设置面板样式 ===== */
+
+.setting-hint {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    margin-top: 4px;
+    line-height: 1.4;
+}
+
+.setting-textarea {
+    width: 100%;
+    min-height: 48px;
+    resize: vertical;
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 1.5;
+    padding: 8px 10px;
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-sm);
+    background: var(--background-primary);
+    color: var(--text-primary);
+    transition: border-color 0.15s;
+}
+
+.setting-textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+/* 字体预设按钮组 */
+.cover-font-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+/* 艺术字效果选择器 */
+.cover-effect-presets {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.cover-effect-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 4px;
+    border: 2px solid var(--border-primary);
+    border-radius: var(--radius-md);
+    background: var(--background-primary);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.cover-effect-btn:hover {
+    border-color: var(--text-tertiary);
+}
+
+.cover-effect-btn.active {
+    border-color: var(--primary-color);
+    background: var(--primary-light);
+}
+
+.effect-preview {
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--text-primary);
+}
+
+.effect-label {
+    font-size: 10px;
+    color: var(--text-tertiary);
+}
+
+/* 效果预览小样 */
+.effect-preview.effect-stroke {
+    -webkit-text-stroke: 1.5px var(--text-primary);
+    color: transparent;
+}
+
+.effect-preview.effect-shadow {
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.effect-preview.effect-gradient {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+.effect-preview.effect-neon {
+    text-shadow: 0 0 5px rgba(99, 102, 241, 0.8), 0 0 10px rgba(99, 102, 241, 0.4);
+}
+
+.effect-preview.effect-emboss {
+    text-shadow: -1px -1px 0 rgba(255, 255, 255, 0.6), 1px 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+/* 布局预设按钮组 */
+.cover-layout-presets {
+    display: flex;
+    gap: 6px;
 }
 
 /* 动画效果 */
