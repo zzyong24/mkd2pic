@@ -4,20 +4,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Madopic - Markdown to Picture</title>
+    <title>Mkd2pic - Markdown to Picture</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg?v=20260119">
-    <link rel="apple-touch-icon" href="madopic.png?v=20260119">
+    <link rel="apple-touch-icon" href="Mkd2pic.png?v=20260119">
     <meta name="theme-color" content="#6366f1">
     <meta name="description" content="精美的 Markdown 转图片工具，轻松制作社交媒体图片">
     <link rel="manifest" href="manifest.json?v=20260119">
-    <link rel="stylesheet" href="style.css?v=20260323">
+    <link rel="stylesheet" href="style.css?v=20260324b">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <!-- KaTeX CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
     <!-- Prism.js 代码高亮 CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <!-- html2canvas 和 jsPDF 改为懒加载，不在此处同步加载 -->
     <!-- KaTeX JavaScript -->
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
@@ -39,7 +38,7 @@
         <!-- 顶部工具栏 -->
         <div class="toolbar">
             <div class="toolbar-left">
-                <h1><img src="favicon.svg" alt="Madopic" class="app-icon"> Madopic</h1>
+                <h1><img src="favicon.svg" alt="Mkd2pic" class="app-icon"> Mkd2pic</h1>
                 <span class="subtitle">Markdown to Picture 🎨✨</span>
             </div>
             <!-- 汉堡菜单按钮（移动端显示） -->
@@ -61,11 +60,11 @@
                         <span>朋友圈</span>
                     </button>
                 </div>
-                <button class="btn btn-secondary" id="backgroundBtn">
-                    <i class="fas fa-palette"></i> 背景设置
+                <button class="btn btn-secondary" id="settingsBtn">
+                    <i class="fas fa-cog"></i> 设置
                 </button>
-                <button class="btn btn-secondary" id="layoutBtn">
-                    <i class="fas fa-text-height"></i> 文字布局
+                <button class="btn btn-secondary" id="multiPreviewBtn" title="多图预览">
+                    <i class="fas fa-th"></i> 多图预览
                 </button>
                 <button class="btn btn-primary" id="exportPngBtn">
                     <i class="fas fa-image"></i> 导出PNG
@@ -79,7 +78,7 @@
                 <button class="btn btn-primary" id="exportHtmlBtn">
                     <i class="fas fa-file-code"></i> 导出HTML
                 </button>
-                <a href="https://github.com/zzyong24/madopic" target="_blank" class="github-link" title="查看GitHub源码">
+                <a href="https://github.com/zzyong24/mkd2pic" target="_blank" class="github-link" title="查看GitHub源码">
                     <i class="fab fa-github"></i>
                 </a>
             </div>
@@ -153,11 +152,13 @@
                 </div>
                 <!-- 隐藏的文件选择器 -->
                 <input type="file" id="imageInput" accept="image/*" style="display: none;">
+                <input type="file" id="avatarInput" accept="image/*" style="display: none;">
+                <input type="file" id="bgImageInput" accept="image/*" style="display: none;">
                 <div class="editor-with-lines">
                     <pre class="line-numbers" aria-hidden="true"></pre>
-                    <textarea id="markdownInput" placeholder="在这里输入你的 Markdown 内容..."># Madopic
+                    <textarea id="markdownInput" placeholder="在这里输入你的 Markdown 内容..."># Mkd2pic
 
-> Madopic，精美的 Markdown 转图片工具 🎨
+> Mkd2pic，精美的 Markdown 转图片工具 🎨
 
 ![](https://pic4.zhimg.com/v2-a342a311176f76e4120b7084d9f18db3_r.jpg)
 
@@ -185,7 +186,7 @@
             </div>
 
             <!-- 右侧预览面板 -->
-            <div class="preview-panel">
+            <div class="preview-panel" id="previewPanel">
                 <div class="panel-header">
                     <h3><i class="fas fa-eye"></i> 实时预览</h3>
                     <div class="preview-tools">
@@ -198,6 +199,7 @@
                         </button>
                     </div>
                 </div>
+                <!-- 单页预览容器 -->
                 <div class="preview-container" id="previewContainer">
                     <div class="preview-content" id="previewContent">
                         <div class="markdown-poster" id="markdownPoster">
@@ -208,103 +210,339 @@
                             <div class="poster-content" id="posterContent">
                                 <!-- Markdown 渲染内容将在这里显示 -->
                             </div>
+                            <div class="poster-footer" id="posterFooter">
+                                <span class="footer-line-left"></span>
+                                <span class="footer-text">AI为基，认知破界</span>
+                                <span class="footer-line-right"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- 多图预览容器（默认隐藏） -->
+                <div class="multi-preview-container" id="multiPreviewContainer" style="display:none;">
+                    <div class="multi-preview-toolbar">
+                        <div class="multi-preview-mode-switch">
+                            <button class="btn btn-secondary btn-sm active" id="gridViewBtn" title="网格视图">
+                                <i class="fas fa-th"></i>
+                            </button>
+                            <button class="btn btn-secondary btn-sm" id="carouselViewBtn" title="轮播视图">
+                                <i class="fas fa-arrows-alt-h"></i>
+                            </button>
+                        </div>
+                        <span class="multi-preview-info" id="multiPreviewInfo">共 0 页</span>
+                        <button class="btn btn-secondary btn-sm" id="closeMultiPreview">
+                            <i class="fas fa-times"></i> 关闭预览
+                        </button>
+                    </div>
+                    <!-- 网格视图 -->
+                    <div class="multi-preview-grid" id="multiPreviewGrid">
+                        <!-- 动态生成的页面缩略图 -->
+                    </div>
+                    <!-- 轮播视图 -->
+                    <div class="multi-preview-carousel" id="multiPreviewCarousel" style="display:none;">
+                        <button class="carousel-nav carousel-prev" id="carouselPrev">
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                        <div class="carousel-viewport" id="carouselViewport">
+                            <!-- 动态生成的当前页面 -->
+                        </div>
+                        <button class="carousel-nav carousel-next" id="carouselNext">
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                        <div class="carousel-thumbnails" id="carouselThumbnails">
+                            <!-- 缩略图导航条 -->
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- 背景设置面板 -->
-        <div class="background-panel" id="backgroundPanel">
-            <div class="panel-content">
-                <h3><i class="fas fa-palette"></i> 背景设置</h3>
-
-                <div class="setting-section">
-                    <div class="option-group">
-                        <label>预设背景：</label>
-                        <div class="preset-backgrounds">
-                            <div class="bg-preset active" data-bg="gradient1"></div>
-                            <div class="bg-preset" data-bg="gradient2"></div>
-                            <div class="bg-preset" data-bg="gradient3"></div>
-                            <div class="bg-preset" data-bg="gradient4"></div>
-                            <div class="bg-preset" data-bg="gradient5"></div>
-                            <div class="bg-preset" data-bg="gradient6"></div>
-                            <div class="bg-preset" data-bg="gradient7"></div>
-                            <div class="bg-preset" data-bg="gradient8"></div>
-                        </div>
-                    </div>
-                    <div class="option-group">
-                        <label>自定义颜色：</label>
-                        <div class="color-inputs">
-                            <div class="color-input-group">
-                                <label>起始色：</label>
-                                <input type="color" id="colorStart" value="#667eea">
-                            </div>
-                            <div class="color-input-group">
-                                <label>结束色：</label>
-                                <input type="color" id="colorEnd" value="#764ba2">
-                            </div>
-                        </div>
-                    </div>
-                    <div class="option-group">
-                        <label>渐变方向：</label>
-                        <select id="gradientDirection">
-                            <option value="135deg">左上到右下</option>
-                            <option value="45deg">左下到右上</option>
-                            <option value="0deg">左到右</option>
-                            <option value="90deg">上到下</option>
-                            <option value="180deg">下到上</option>
-                            <option value="270deg">右到左</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="panel-actions">
-                    <button class="btn btn-secondary" id="cancelBackground">取消</button>
-                    <button class="btn btn-primary" id="applyBackground">应用</button>
-                </div>
+        <!-- 右侧设置侧边栏 -->
+        <div class="settings-sidebar" id="settingsSidebar">
+            <div class="sidebar-header">
+                <h3><i class="fas fa-cog"></i> 设置</h3>
+                <button class="tool-btn" id="closeSidebar" title="关闭设置">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
-        </div>
-
-        <!-- 文字布局设置面板 -->
-        <div class="background-panel" id="layoutPanel">
-            <div class="panel-content">
-                <h3><i class="fas fa-text-height"></i> 文字布局设置</h3>
-
-                <!-- 文字设置 -->
-                <div class="setting-section">
-                    <h4><i class="fas fa-font"></i> 文字设置</h4>
-                    <div class="option-group">
-                        <label>文字大小：</label>
-                        <div class="slider-group">
-                            <input type="range" id="fontSizeSlider" min="14" max="22" value="18" step="0.5">
-                            <span class="slider-value" id="fontSizeValue">18px</span>
+            <div class="sidebar-tabs">
+                <button class="sidebar-tab active" data-tab="header-tab">
+                    <i class="fas fa-heading"></i> 页眉
+                </button>
+                <button class="sidebar-tab" data-tab="footer-tab">
+                    <i class="fas fa-shoe-prints"></i> 页脚
+                </button>
+                <button class="sidebar-tab" data-tab="background-tab">
+                    <i class="fas fa-palette"></i> 背景
+                </button>
+                <button class="sidebar-tab" data-tab="layout-tab">
+                    <i class="fas fa-ruler-combined"></i> 布局
+                </button>
+            </div>
+            <div class="sidebar-body">
+                <!-- === 页眉 Tab === -->
+                <div class="tab-panel active" id="header-tab">
+                    <div class="setting-section">
+                        <div class="setting-row">
+                            <label>启用页眉</label>
+                            <label class="switch">
+                                <input type="checkbox" id="headerEnabled" checked>
+                                <span class="switch-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="setting-section">
+                        <h4>头像</h4>
+                        <div class="avatar-upload-area" id="avatarUploadArea">
+                            <img src="Portrait.png" alt="avatar" class="avatar-preview" id="avatarPreview">
+                            <button class="btn btn-secondary btn-sm" id="changeAvatarBtn">
+                                <i class="fas fa-camera"></i> 更换头像
+                            </button>
+                        </div>
+                    </div>
+                    <div class="setting-section">
+                        <h4>显示名称</h4>
+                        <input type="text" class="setting-input" id="headerName" value="MoonlitClear" placeholder="输入显示名称">
+                    </div>
+                    <div class="setting-section">
+                        <h4>名称颜色</h4>
+                        <div class="color-picker-row">
+                            <input type="color" id="headerNameColor" value="#1a1a2e">
+                            <span class="color-value" id="headerNameColorValue">#1a1a2e</span>
+                        </div>
+                    </div>
+                    <div class="setting-section">
+                        <h4>间距</h4>
+                        <div class="option-group">
+                            <label>上间隙</label>
+                            <div class="slider-group">
+                                <input type="range" id="headerPaddingTop" min="0" max="40" value="14" step="1">
+                                <span class="slider-value" id="headerPaddingTopValue">14px</span>
+                            </div>
+                        </div>
+                        <div class="option-group">
+                            <label>下间隙</label>
+                            <div class="slider-group">
+                                <input type="range" id="headerPaddingBottom" min="0" max="40" value="10" step="1">
+                                <span class="slider-value" id="headerPaddingBottomValue">10px</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="setting-section">
+                        <div class="setting-row">
+                            <label>显示页码</label>
+                            <label class="switch">
+                                <input type="checkbox" id="showPageNumber" checked>
+                                <span class="switch-slider"></span>
+                            </label>
+                        </div>
+                        <div class="option-group">
+                            <label>页码颜色</label>
+                            <div class="color-picker-row">
+                                <input type="color" id="pageNumberColor" value="#878787">
+                                <span class="color-value" id="pageNumberColorValue">#878787</span>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- 布局设置 -->
-                <div class="setting-section">
-                    <h4><i class="fas fa-expand-arrows-alt"></i> 布局设置</h4>
-                    <div class="option-group">
-                        <label>整体宽度：</label>
-                        <div class="slider-group">
-                            <input type="range" id="widthSlider" min="480" max="800" value="640" step="20">
-                            <span class="slider-value" id="widthValue">640px</span>
+                <!-- === 页脚 Tab === -->
+                <div class="tab-panel" id="footer-tab">
+                    <div class="setting-section">
+                        <div class="setting-row">
+                            <label>启用页脚</label>
+                            <label class="switch">
+                                <input type="checkbox" id="footerEnabled" checked>
+                                <span class="switch-slider"></span>
+                            </label>
                         </div>
                     </div>
-                    <div class="option-group">
-                        <label>卡片边距：</label>
+                    <div class="setting-section">
+                        <h4>页脚文字</h4>
+                        <input type="text" class="setting-input" id="footerText" value="AI为基，认知破界" placeholder="输入页脚文字">
+                    </div>
+                    <div class="setting-section">
+                        <h4>文字颜色</h4>
+                        <div class="color-picker-row">
+                            <input type="color" id="footerTextColor" value="#878787">
+                            <span class="color-value" id="footerTextColorValue">#878787</span>
+                        </div>
+                    </div>
+                    <div class="setting-section">
+                        <h4>文字大小</h4>
                         <div class="slider-group">
-                            <input type="range" id="paddingSlider" min="20" max="60" value="40" step="2.5">
-                            <span class="slider-value" id="paddingValue">40px</span>
+                            <input type="range" id="footerFontSize" min="10" max="18" value="12" step="1">
+                            <span class="slider-value" id="footerFontSizeValue">12px</span>
+                        </div>
+                    </div>
+                    <div class="setting-section">
+                        <h4>字间距</h4>
+                        <div class="slider-group">
+                            <input type="range" id="footerLetterSpacing" min="0" max="8" value="1" step="0.5">
+                            <span class="slider-value" id="footerLetterSpacingValue">1px</span>
+                        </div>
+                    </div>
+                    <div class="setting-section">
+                        <h4>间距</h4>
+                        <div class="option-group">
+                            <label>上间隙</label>
+                            <div class="slider-group">
+                                <input type="range" id="footerPaddingTop" min="0" max="40" value="14" step="1">
+                                <span class="slider-value" id="footerPaddingTopValue">14px</span>
+                            </div>
+                        </div>
+                        <div class="option-group">
+                            <label>下间隙</label>
+                            <div class="slider-group">
+                                <input type="range" id="footerPaddingBottom" min="0" max="40" value="18" step="1">
+                                <span class="slider-value" id="footerPaddingBottomValue">18px</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="setting-section">
+                        <div class="setting-row">
+                            <label>两侧分隔线</label>
+                            <label class="switch">
+                                <input type="checkbox" id="footerShowDivider" checked>
+                                <span class="switch-slider"></span>
+                            </label>
+                        </div>
+                        <div class="option-group">
+                            <label>分隔线颜色</label>
+                            <div class="color-picker-row">
+                                <input type="color" id="footerDividerColor" value="#787878">
+                                <span class="color-value" id="footerDividerColorValue">#787878</span>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <div class="panel-actions">
-                    <button class="btn btn-secondary" id="cancelLayout">取消</button>
-                    <button class="btn btn-primary" id="applyLayout">应用</button>
+                <!-- === 背景 Tab === -->
+                <div class="tab-panel" id="background-tab">
+                    <div class="setting-section">
+                        <h4>背景类型</h4>
+                        <div class="bg-type-group">
+                            <button class="btn btn-secondary btn-sm active" data-bg-type="gradient">渐变色</button>
+                            <button class="btn btn-secondary btn-sm" data-bg-type="solid">纯色</button>
+                            <button class="btn btn-secondary btn-sm" data-bg-type="image">背景图</button>
+                        </div>
+                    </div>
+                    <!-- 渐变色设置 -->
+                    <div class="bg-type-panel active" id="bgGradientPanel">
+                        <div class="setting-section">
+                            <h4>预设渐变</h4>
+                            <div class="preset-backgrounds">
+                                <div class="bg-preset active" data-bg="gradient1"></div>
+                                <div class="bg-preset" data-bg="gradient2"></div>
+                                <div class="bg-preset" data-bg="gradient3"></div>
+                                <div class="bg-preset" data-bg="gradient4"></div>
+                                <div class="bg-preset" data-bg="gradient5"></div>
+                                <div class="bg-preset" data-bg="gradient6"></div>
+                                <div class="bg-preset" data-bg="gradient7"></div>
+                                <div class="bg-preset" data-bg="gradient8"></div>
+                            </div>
+                        </div>
+                        <div class="setting-section">
+                            <h4>自定义渐变</h4>
+                            <div class="color-inputs">
+                                <div class="color-input-group">
+                                    <label>起始色</label>
+                                    <input type="color" id="colorStart" value="#667eea">
+                                </div>
+                                <div class="color-input-group">
+                                    <label>结束色</label>
+                                    <input type="color" id="colorEnd" value="#764ba2">
+                                </div>
+                            </div>
+                            <div class="option-group" style="margin-top:8px;">
+                                <label>渐变方向</label>
+                                <select id="gradientDirection">
+                                    <option value="135deg">左上到右下</option>
+                                    <option value="45deg">左下到右上</option>
+                                    <option value="0deg">左到右</option>
+                                    <option value="90deg">上到下</option>
+                                    <option value="180deg">下到上</option>
+                                    <option value="270deg">右到左</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 纯色设置 -->
+                    <div class="bg-type-panel" id="bgSolidPanel">
+                        <div class="setting-section">
+                            <h4>背景颜色</h4>
+                            <div class="color-picker-row">
+                                <input type="color" id="bgSolidColor" value="#f5f5f5">
+                                <span class="color-value" id="bgSolidColorValue">#f5f5f5</span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 背景图设置 -->
+                    <div class="bg-type-panel" id="bgImagePanel">
+                        <div class="setting-section">
+                            <h4>背景图片</h4>
+                            <div class="bg-image-upload" id="bgImageUploadArea">
+                                <div class="bg-image-preview" id="bgImagePreview">
+                                    <i class="fas fa-cloud-upload-alt"></i>
+                                    <span>点击上传背景图</span>
+                                </div>
+                            </div>
+                            <button class="btn btn-secondary btn-sm" id="clearBgImage" style="margin-top:8px;">
+                                <i class="fas fa-trash"></i> 清除背景图
+                            </button>
+                        </div>
+                        <div class="setting-section">
+                            <h4>虚化程度</h4>
+                            <div class="slider-group">
+                                <input type="range" id="bgImageBlur" min="0" max="30" value="12" step="1">
+                                <span class="slider-value" id="bgImageBlurValue">12px</span>
+                            </div>
+                        </div>
+                        <div class="setting-section">
+                            <h4>背景透明度</h4>
+                            <div class="slider-group">
+                                <input type="range" id="bgImageOpacity" min="0.1" max="1" value="0.3" step="0.05">
+                                <span class="slider-value" id="bgImageOpacityValue">0.3</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- === 布局 Tab === -->
+                <div class="tab-panel" id="layout-tab">
+                    <div class="setting-section">
+                        <h4><i class="fas fa-font"></i> 文字设置</h4>
+                        <div class="option-group">
+                            <label>文字大小</label>
+                            <div class="slider-group">
+                                <input type="range" id="fontSizeSlider" min="14" max="22" value="18" step="0.5">
+                                <span class="slider-value" id="fontSizeValue">18px</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="setting-section">
+                        <h4><i class="fas fa-expand-arrows-alt"></i> 布局设置</h4>
+                        <div class="option-group">
+                            <label>整体宽度</label>
+                            <div class="slider-group">
+                                <input type="range" id="widthSlider" min="480" max="800" value="640" step="20">
+                                <span class="slider-value" id="widthValue">640px</span>
+                            </div>
+                        </div>
+                        <div class="option-group">
+                            <label>卡片边距</label>
+                            <div class="slider-group">
+                                <input type="range" id="paddingSlider" min="20" max="60" value="40" step="2.5">
+                                <span class="slider-value" id="paddingValue">40px</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="setting-section">
+                        <h4><i class="fas fa-undo"></i> 重置</h4>
+                        <button class="btn btn-secondary" id="resetAllSettings" style="width:100%;">
+                            <i class="fas fa-undo"></i> 恢复默认设置
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -313,7 +551,7 @@
         <div class="overlay" id="overlay"></div>
     </div>
 
-    <script src="script.js?v=20260323"></script>
+    <script src="script.js?v=20260324b"></script>
 </body>
 
 </html>

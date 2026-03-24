@@ -52,6 +52,712 @@ let currentWidth = AppState.width;
 let currentMode = AppState.mode;
 let fixedHeights = AppState.fixedHeights;
 
+// ===== Madopic 配置系统 =====
+const CONFIG_KEY = 'madopic_config';
+
+/**
+ * 配置对象 — 管理页眉、页脚、背景、布局等全部设置
+ * 所有配置变更通过 saveConfig() 持久化到 localStorage
+ */
+const MadopicConfig = {
+    header: {
+        enabled: true,
+        avatar: 'Portrait.png',
+        name: 'MoonlitClear',
+        nameColor: '#1a1a2e',
+        paddingTop: 14,
+        paddingBottom: 10,
+        showPageNumber: true,
+        pageNumberColor: '#878787'
+    },
+    footer: {
+        enabled: true,
+        text: 'AI为基，认知破界',
+        textColor: '#878787',
+        fontSize: 12,
+        letterSpacing: 1,
+        paddingTop: 14,
+        paddingBottom: 18,
+        showDivider: true,
+        dividerColor: '#787878'
+    },
+    background: {
+        type: 'gradient', // 'gradient' | 'solid' | 'image'
+        preset: 'gradient1',
+        customStartColor: '#667eea',
+        customEndColor: '#764ba2',
+        gradientDirection: '135deg',
+        solidColor: '#f5f5f5',
+        imageData: null,
+        imageBlur: 12,
+        imageOpacity: 0.3
+    },
+    layout: {
+        fontSize: 18,
+        width: 640,
+        padding: 40
+    }
+};
+
+/** 深合并对象 */
+function deepMerge(target, source) {
+    for (const key of Object.keys(source)) {
+        if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+            if (!target[key] || typeof target[key] !== 'object') target[key] = {};
+            deepMerge(target[key], source[key]);
+        } else {
+            target[key] = source[key];
+        }
+    }
+    return target;
+}
+
+/** 保存配置到 localStorage */
+function saveConfig() {
+    try {
+        localStorage.setItem(CONFIG_KEY, JSON.stringify(MadopicConfig));
+    } catch (e) {
+        console.warn('保存配置失败:', e);
+    }
+    // 配置变更后，如果多图预览正在显示，防抖刷新预览图片
+    if (typeof scheduleMultiPreviewRefresh === 'function') {
+        scheduleMultiPreviewRefresh();
+    }
+}
+
+/** 从 localStorage 加载配置 */
+function loadConfig() {
+    try {
+        const raw = localStorage.getItem(CONFIG_KEY);
+        if (raw) {
+            const saved = JSON.parse(raw);
+            deepMerge(MadopicConfig, saved);
+        }
+    } catch (e) {
+        console.warn('加载配置失败:', e);
+    }
+}
+
+// ===== 配置应用函数 =====
+
+/** 将页眉配置同步到预览区 DOM */
+function applyHeaderConfig() {
+    const header = document.getElementById('posterHeader');
+    if (!header) return;
+    const cfg = MadopicConfig.header;
+
+    header.style.display = cfg.enabled ? 'flex' : 'none';
+    header.style.paddingTop = cfg.paddingTop + 'px';
+    header.style.paddingBottom = cfg.paddingBottom + 'px';
+
+    const avatar = header.querySelector('.header-avatar');
+    if (avatar && cfg.avatar) avatar.src = cfg.avatar;
+
+    const nameEl = header.querySelector('.header-name');
+    if (nameEl) {
+        nameEl.textContent = cfg.name;
+        nameEl.style.color = cfg.nameColor;
+    }
+}
+
+/** 将页脚配置同步到预览区 DOM */
+function applyFooterConfig() {
+    const footer = document.getElementById('posterFooter');
+    if (!footer) return;
+    const cfg = MadopicConfig.footer;
+
+    footer.style.display = cfg.enabled ? 'flex' : 'none';
+    footer.style.paddingTop = cfg.paddingTop + 'px';
+    footer.style.paddingBottom = cfg.paddingBottom + 'px';
+
+    const text = footer.querySelector('.footer-text');
+    if (text) {
+        text.textContent = cfg.text;
+        text.style.color = cfg.textColor;
+        text.style.fontSize = cfg.fontSize + 'px';
+        text.style.letterSpacing = cfg.letterSpacing + 'px';
+    }
+
+    const lineL = footer.querySelector('.footer-line-left');
+    const lineR = footer.querySelector('.footer-line-right');
+    if (lineL) {
+        lineL.style.display = cfg.showDivider ? 'block' : 'none';
+        lineL.style.background = `linear-gradient(to left, ${hexToRgba(cfg.dividerColor, 0.3)}, transparent)`;
+    }
+    if (lineR) {
+        lineR.style.display = cfg.showDivider ? 'block' : 'none';
+        lineR.style.background = `linear-gradient(to right, ${hexToRgba(cfg.dividerColor, 0.3)}, transparent)`;
+    }
+}
+
+/** 将背景配置应用到预览区 poster */
+function applyBackgroundFromConfig() {
+    const cfg = MadopicConfig.background;
+    const poster = document.getElementById('markdownPoster');
+    if (!poster) return;
+
+    // 移除旧的背景图层
+    const oldBgImg = poster.querySelector('.poster-bg-image');
+    if (oldBgImg) oldBgImg.remove();
+
+    if (cfg.type === 'gradient') {
+        let bgCss;
+        if (cfg.preset === 'custom') {
+            bgCss = `linear-gradient(${cfg.gradientDirection}, ${cfg.customStartColor} 0%, ${cfg.customEndColor} 100%)`;
+        } else {
+            bgCss = backgroundPresets[cfg.preset] || backgroundPresets.gradient1;
+        }
+        poster.style.background = bgCss;
+    } else if (cfg.type === 'solid') {
+        poster.style.background = cfg.solidColor;
+    } else if (cfg.type === 'image' && cfg.imageData) {
+        poster.style.background = '#f5f5f5';
+        // 创建虚化背景图层
+        const bgLayer = document.createElement('div');
+        bgLayer.className = 'poster-bg-image';
+        bgLayer.style.backgroundImage = `url(${cfg.imageData})`;
+        bgLayer.style.filter = `blur(${cfg.imageBlur}px)`;
+        bgLayer.style.opacity = cfg.imageOpacity;
+        // 扩展边缘防止虚化白边
+        const expand = Math.max(cfg.imageBlur * 2, 20);
+        bgLayer.style.top = `-${expand}px`;
+        bgLayer.style.left = `-${expand}px`;
+        bgLayer.style.right = `-${expand}px`;
+        bgLayer.style.bottom = `-${expand}px`;
+        poster.insertBefore(bgLayer, poster.firstChild);
+    }
+}
+
+/** 应用全部配置到预览区 */
+function applyAllConfig() {
+    applyHeaderConfig();
+    applyFooterConfig();
+    applyBackgroundFromConfig();
+    // 布局
+    const lc = MadopicConfig.layout;
+    currentFontSize = lc.fontSize;
+    currentPadding = lc.padding;
+    currentWidth = lc.width;
+    applyFontSize(currentFontSize);
+    applyPadding(currentPadding);
+    applyWidth(currentWidth);
+}
+
+/** hex 颜色转 rgba */
+function hexToRgba(hex, alpha) {
+    hex = hex.replace('#', '');
+    if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+// ===== 设置侧边栏控制 =====
+
+function openSettingsSidebar() {
+    const sidebar = document.getElementById('settingsSidebar');
+    const overlay = document.getElementById('overlay');
+    if (sidebar) sidebar.classList.add('open');
+    if (overlay) overlay.classList.add('active');
+    syncSidebarFromConfig();
+}
+
+function closeSettingsSidebar() {
+    const sidebar = document.getElementById('settingsSidebar');
+    const overlayEl = document.getElementById('overlay');
+    if (sidebar) sidebar.classList.remove('open');
+    if (overlayEl) overlayEl.classList.remove('active');
+}
+
+/** 将当前 MadopicConfig 同步到侧边栏控件 */
+function syncSidebarFromConfig() {
+    const cfg = MadopicConfig;
+    // 页眉
+    _setChecked('headerEnabled', cfg.header.enabled);
+    _setVal('headerName', cfg.header.name);
+    _setColor('headerNameColor', cfg.header.nameColor);
+    _setRange('headerPaddingTop', cfg.header.paddingTop);
+    _setRange('headerPaddingBottom', cfg.header.paddingBottom);
+    _setChecked('showPageNumber', cfg.header.showPageNumber);
+    _setColor('pageNumberColor', cfg.header.pageNumberColor);
+    // 头像预览
+    const avPrev = document.getElementById('avatarPreview');
+    if (avPrev && cfg.header.avatar) avPrev.src = cfg.header.avatar;
+    // 页脚
+    _setChecked('footerEnabled', cfg.footer.enabled);
+    _setVal('footerText', cfg.footer.text);
+    _setColor('footerTextColor', cfg.footer.textColor);
+    _setRange('footerFontSize', cfg.footer.fontSize);
+    _setRange('footerLetterSpacing', cfg.footer.letterSpacing);
+    _setRange('footerPaddingTop', cfg.footer.paddingTop);
+    _setRange('footerPaddingBottom', cfg.footer.paddingBottom);
+    _setChecked('footerShowDivider', cfg.footer.showDivider);
+    _setColor('footerDividerColor', cfg.footer.dividerColor);
+    // 背景
+    _setColor('colorStart', cfg.background.customStartColor);
+    _setColor('colorEnd', cfg.background.customEndColor);
+    _setVal('gradientDirection', cfg.background.gradientDirection);
+    _setColor('bgSolidColor', cfg.background.solidColor);
+    _setRange('bgImageBlur', cfg.background.imageBlur);
+    _setRange('bgImageOpacity', cfg.background.imageOpacity);
+    // 布局
+    _setRange('fontSizeSlider', cfg.layout.fontSize);
+    _setRange('widthSlider', cfg.layout.width);
+    _setRange('paddingSlider', cfg.layout.padding);
+    // 激活正确的背景类型面板
+    _activateBgTypePanel(cfg.background.type);
+    // 激活正确的渐变预设
+    document.querySelectorAll('.bg-preset').forEach(p => {
+        p.classList.toggle('active', p.getAttribute('data-bg') === cfg.background.preset);
+    });
+    // 背景图预览
+    if (cfg.background.imageData) {
+        const prev = document.getElementById('bgImagePreview');
+        if (prev) {
+            prev.innerHTML = `<img src="${cfg.background.imageData}" alt="背景预览">`;
+        }
+    }
+}
+
+// 侧边栏工具函数
+function _setChecked(id, val) { const el = document.getElementById(id); if (el) el.checked = val; }
+function _setVal(id, val) { const el = document.getElementById(id); if (el) el.value = val; }
+function _setColor(id, val) {
+    const el = document.getElementById(id);
+    if (el) el.value = val;
+    const label = document.getElementById(id + 'Value');
+    if (label) label.textContent = val;
+}
+function _setRange(id, val) {
+    const el = document.getElementById(id);
+    if (el) el.value = val;
+    const label = document.getElementById(id + 'Value');
+    if (label) {
+        const unit = id.includes('Opacity') ? '' : 'px';
+        label.textContent = val + unit;
+    }
+}
+function _activateBgTypePanel(type) {
+    // 按钮
+    document.querySelectorAll('[data-bg-type]').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-bg-type') === type);
+    });
+    // 面板
+    document.getElementById('bgGradientPanel')?.classList.toggle('active', type === 'gradient');
+    document.getElementById('bgSolidPanel')?.classList.toggle('active', type === 'solid');
+    document.getElementById('bgImagePanel')?.classList.toggle('active', type === 'image');
+}
+
+/** 设置侧边栏内所有控件的事件绑定 */
+function setupSettingsSidebar() {
+    // Tab 切换
+    document.querySelectorAll('.sidebar-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+            tab.classList.add('active');
+            const panelId = tab.getAttribute('data-tab');
+            document.getElementById(panelId)?.classList.add('active');
+        });
+    });
+
+    // 关闭侧边栏
+    document.getElementById('closeSidebar')?.addEventListener('click', closeSettingsSidebar);
+    document.getElementById('settingsBtn')?.addEventListener('click', openSettingsSidebar);
+
+    setupHeaderControls();
+    setupFooterControls();
+    setupBackgroundControls();
+    setupLayoutControls();
+    setupResetButton();
+}
+
+function setupHeaderControls() {
+    _bindCheckbox('headerEnabled', v => { MadopicConfig.header.enabled = v; applyHeaderConfig(); saveConfig(); });
+    _bindInput('headerName', v => { MadopicConfig.header.name = v; applyHeaderConfig(); saveConfig(); });
+    _bindColor('headerNameColor', v => { MadopicConfig.header.nameColor = v; applyHeaderConfig(); saveConfig(); });
+    _bindSlider('headerPaddingTop', v => { MadopicConfig.header.paddingTop = parseInt(v); applyHeaderConfig(); saveConfig(); });
+    _bindSlider('headerPaddingBottom', v => { MadopicConfig.header.paddingBottom = parseInt(v); applyHeaderConfig(); saveConfig(); });
+    _bindCheckbox('showPageNumber', v => { MadopicConfig.header.showPageNumber = v; applyHeaderConfig(); saveConfig(); });
+    _bindColor('pageNumberColor', v => { MadopicConfig.header.pageNumberColor = v; applyHeaderConfig(); saveConfig(); });
+
+    // 头像更换
+    document.getElementById('changeAvatarBtn')?.addEventListener('click', () => {
+        document.getElementById('avatarInput')?.click();
+    });
+    document.getElementById('avatarInput')?.addEventListener('change', e => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = ev => {
+            MadopicConfig.header.avatar = ev.target.result;
+            applyHeaderConfig();
+            saveConfig();
+            const prev = document.getElementById('avatarPreview');
+            if (prev) prev.src = ev.target.result;
+        };
+        reader.readAsDataURL(file);
+        e.target.value = '';
+    });
+}
+
+function setupFooterControls() {
+    _bindCheckbox('footerEnabled', v => { MadopicConfig.footer.enabled = v; applyFooterConfig(); saveConfig(); });
+    _bindInput('footerText', v => { MadopicConfig.footer.text = v; applyFooterConfig(); saveConfig(); });
+    _bindColor('footerTextColor', v => { MadopicConfig.footer.textColor = v; applyFooterConfig(); saveConfig(); });
+    _bindSlider('footerFontSize', v => { MadopicConfig.footer.fontSize = parseInt(v); applyFooterConfig(); saveConfig(); });
+    _bindSlider('footerLetterSpacing', v => { MadopicConfig.footer.letterSpacing = parseFloat(v); applyFooterConfig(); saveConfig(); });
+    _bindSlider('footerPaddingTop', v => { MadopicConfig.footer.paddingTop = parseInt(v); applyFooterConfig(); saveConfig(); });
+    _bindSlider('footerPaddingBottom', v => { MadopicConfig.footer.paddingBottom = parseInt(v); applyFooterConfig(); saveConfig(); });
+    _bindCheckbox('footerShowDivider', v => { MadopicConfig.footer.showDivider = v; applyFooterConfig(); saveConfig(); });
+    _bindColor('footerDividerColor', v => { MadopicConfig.footer.dividerColor = v; applyFooterConfig(); saveConfig(); });
+}
+
+function setupBackgroundControls() {
+    // 背景类型切换
+    document.querySelectorAll('[data-bg-type]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const type = btn.getAttribute('data-bg-type');
+            MadopicConfig.background.type = type;
+            _activateBgTypePanel(type);
+            applyBackgroundFromConfig();
+            saveConfig();
+        });
+    });
+
+    // 渐变预设
+    document.querySelectorAll('.bg-preset').forEach(preset => {
+        preset.addEventListener('click', () => {
+            document.querySelectorAll('.bg-preset').forEach(p => p.classList.remove('active'));
+            preset.classList.add('active');
+            MadopicConfig.background.preset = preset.getAttribute('data-bg');
+            MadopicConfig.background.type = 'gradient';
+            _activateBgTypePanel('gradient');
+            applyBackgroundFromConfig();
+            saveConfig();
+        });
+    });
+
+    // 自定义渐变
+    _bindColor('colorStart', v => {
+        MadopicConfig.background.customStartColor = v;
+        MadopicConfig.background.preset = 'custom';
+        document.querySelectorAll('.bg-preset').forEach(p => p.classList.remove('active'));
+        applyBackgroundFromConfig();
+        saveConfig();
+    });
+    _bindColor('colorEnd', v => {
+        MadopicConfig.background.customEndColor = v;
+        MadopicConfig.background.preset = 'custom';
+        document.querySelectorAll('.bg-preset').forEach(p => p.classList.remove('active'));
+        applyBackgroundFromConfig();
+        saveConfig();
+    });
+    document.getElementById('gradientDirection')?.addEventListener('change', e => {
+        MadopicConfig.background.gradientDirection = e.target.value;
+        MadopicConfig.background.preset = 'custom';
+        document.querySelectorAll('.bg-preset').forEach(p => p.classList.remove('active'));
+        applyBackgroundFromConfig();
+        saveConfig();
+    });
+
+    // 纯色
+    _bindColor('bgSolidColor', v => {
+        MadopicConfig.background.solidColor = v;
+        applyBackgroundFromConfig();
+        saveConfig();
+    });
+
+    // 背景图上传
+    document.getElementById('bgImageUploadArea')?.addEventListener('click', () => {
+        document.getElementById('bgImageInput')?.click();
+    });
+    document.getElementById('bgImageInput')?.addEventListener('change', e => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = ev => {
+            MadopicConfig.background.imageData = ev.target.result;
+            MadopicConfig.background.type = 'image';
+            _activateBgTypePanel('image');
+            applyBackgroundFromConfig();
+            saveConfig();
+            const prev = document.getElementById('bgImagePreview');
+            if (prev) prev.innerHTML = `<img src="${ev.target.result}" alt="背景预览">`;
+        };
+        reader.readAsDataURL(file);
+        e.target.value = '';
+    });
+    document.getElementById('clearBgImage')?.addEventListener('click', () => {
+        MadopicConfig.background.imageData = null;
+        MadopicConfig.background.type = 'gradient';
+        _activateBgTypePanel('gradient');
+        applyBackgroundFromConfig();
+        saveConfig();
+        const prev = document.getElementById('bgImagePreview');
+        if (prev) prev.innerHTML = '<i class="fas fa-cloud-upload-alt"></i><span>点击上传背景图</span>';
+    });
+
+    // 虚化 & 透明度
+    _bindSlider('bgImageBlur', v => { MadopicConfig.background.imageBlur = parseInt(v); applyBackgroundFromConfig(); saveConfig(); });
+    _bindSlider('bgImageOpacity', v => { MadopicConfig.background.imageOpacity = parseFloat(v); applyBackgroundFromConfig(); saveConfig(); });
+}
+
+function setupLayoutControls() {
+    _bindSlider('fontSizeSlider', v => {
+        const n = parseFloat(v);
+        MadopicConfig.layout.fontSize = n;
+        currentFontSize = n;
+        applyFontSize(n);
+        saveConfig();
+    });
+    _bindSlider('widthSlider', v => {
+        const n = parseInt(v);
+        MadopicConfig.layout.width = n;
+        currentWidth = n;
+        applyWidth(n);
+        saveConfig();
+    });
+    _bindSlider('paddingSlider', v => {
+        const n = parseFloat(v);
+        MadopicConfig.layout.padding = n;
+        currentPadding = n;
+        applyPadding(n);
+        saveConfig();
+    });
+}
+
+function setupResetButton() {
+    document.getElementById('resetAllSettings')?.addEventListener('click', () => {
+        if (!confirm('确认恢复所有设置为默认值？')) return;
+        localStorage.removeItem(CONFIG_KEY);
+        location.reload();
+    });
+}
+
+// 控件绑定辅助函数
+function _bindCheckbox(id, cb) {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', () => cb(el.checked));
+}
+function _bindInput(id, cb) {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', debounce(() => cb(el.value), 200));
+}
+function _bindColor(id, cb) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const valueEl = document.getElementById(id + 'Value');
+    el.addEventListener('input', () => {
+        if (valueEl) valueEl.textContent = el.value;
+        cb(el.value);
+    });
+}
+function _bindSlider(id, cb) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const valueEl = document.getElementById(id + 'Value');
+    el.addEventListener('input', () => {
+        if (valueEl) {
+            const unit = id.includes('Opacity') ? '' : 'px';
+            valueEl.textContent = el.value + unit;
+        }
+        cb(el.value);
+    });
+}
+
+// ===== 多图预览系统 =====
+
+let multiPreviewPages = []; // 缓存的页面 dataURL 列表
+let multiPreviewCurrentIndex = 0;
+let _multiPreviewRefreshTimer = null;
+
+/**
+ * 当多图预览处于打开状态时，防抖触发重新生成预览。
+ * 在侧边栏配置变更后调用此函数，避免频繁操作时反复渲染。
+ * 设计决策：使用 800ms 防抖而非即时刷新，因为 html2canvas 渲染较重，
+ * 用户连续拖动滑块时不应每帧都重新渲染。
+ */
+function scheduleMultiPreviewRefresh() {
+    const mc = document.getElementById('multiPreviewContainer');
+    // 仅在多图预览可见时才刷新
+    if (!mc || mc.style.display === 'none' || mc.style.display === '') return;
+    if (_multiPreviewRefreshTimer) clearTimeout(_multiPreviewRefreshTimer);
+    _multiPreviewRefreshTimer = setTimeout(() => {
+        _multiPreviewRefreshTimer = null;
+        openMultiPreview();
+    }, 800);
+}
+
+let _multiPreviewRendering = false; // 并发锁，防止重叠渲染
+
+async function openMultiPreview() {
+    const markdownText = markdownInput.value.trim();
+    if (!markdownText) {
+        showNotification('没有内容可预览', 'warning');
+        return;
+    }
+
+    // 如果正在渲染，跳过本次（防抖后会再触发一次）
+    if (_multiPreviewRendering) return;
+    _multiPreviewRendering = true;
+
+    showNotification('正在生成多图预览...', 'info');
+
+    try {
+        // 确保导出库已加载
+        await ensureExportLibsLoaded();
+
+        const pageHeight = Math.round((currentWidth / 3) * 4);
+        const pages = await splitMarkdownIntoPages(markdownText, pageHeight, currentWidth, currentPadding, currentFontSize);
+
+        multiPreviewPages = [];
+
+        for (let i = 0; i < pages.length; i++) {
+            let node = null;
+            try {
+                node = await createPageExportNode(pages[i], i, pages.length);
+                node.style.height = `${pageHeight}px`;
+                node.style.minHeight = `${pageHeight}px`;
+                node.style.overflow = 'hidden';
+
+                await prepareImagesForExport(node);
+                if (document.fonts?.ready) try { await document.fonts.ready; } catch (_) {}
+                await new Promise(r => requestAnimationFrame(r));
+
+                const rect = node.getBoundingClientRect();
+                const canvas = await renderWithFallbackScales(node, Math.ceil(rect.width), Math.ceil(rect.height), [1.5, 1]);
+                const dataUrl = canvas.toDataURL('image/png', 0.85);
+                multiPreviewPages.push(dataUrl);
+            } catch (e) {
+                console.error(`预览第 ${i + 1} 页失败:`, e);
+            } finally {
+                if (node?.parentNode) {
+                    echartsRenderer.destroyAll(node);
+                    node.parentNode.removeChild(node);
+                }
+            }
+        }
+
+        if (multiPreviewPages.length === 0) {
+            showNotification('多图预览生成失败', 'error');
+            return;
+        }
+
+        // 切换到多图预览视图
+        document.getElementById('previewContainer').style.display = 'none';
+        const mc = document.getElementById('multiPreviewContainer');
+        mc.style.display = 'flex';
+        document.getElementById('multiPreviewInfo').textContent = `共 ${multiPreviewPages.length} 页`;
+
+        // 默认显示网格视图
+        switchMultiPreviewMode('grid');
+        renderMultiPreviewGrid();
+
+        showNotification(`已生成 ${multiPreviewPages.length} 页预览`, 'success');
+    } catch (e) {
+        console.error('多图预览失败:', e);
+        showNotification('多图预览生成失败: ' + e.message, 'error');
+    } finally {
+        _multiPreviewRendering = false;
+    }
+}
+
+function closeMultiPreview() {
+    document.getElementById('multiPreviewContainer').style.display = 'none';
+    document.getElementById('previewContainer').style.display = '';
+}
+
+function switchMultiPreviewMode(mode) {
+    const gridBtn = document.getElementById('gridViewBtn');
+    const carouselBtn = document.getElementById('carouselViewBtn');
+    const gridView = document.getElementById('multiPreviewGrid');
+    const carouselView = document.getElementById('multiPreviewCarousel');
+
+    if (mode === 'grid') {
+        gridBtn?.classList.add('active');
+        carouselBtn?.classList.remove('active');
+        if (gridView) gridView.style.display = '';
+        if (carouselView) carouselView.style.display = 'none';
+        renderMultiPreviewGrid();
+    } else {
+        gridBtn?.classList.remove('active');
+        carouselBtn?.classList.add('active');
+        if (gridView) gridView.style.display = 'none';
+        if (carouselView) carouselView.style.display = '';
+        multiPreviewCurrentIndex = 0;
+        renderCarouselPage();
+        renderCarouselThumbnails();
+    }
+}
+
+function renderMultiPreviewGrid() {
+    const grid = document.getElementById('multiPreviewGrid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    multiPreviewPages.forEach((dataUrl, i) => {
+        const card = document.createElement('div');
+        card.className = 'grid-page-card';
+        card.innerHTML = `
+            <img src="${dataUrl}" alt="第 ${i + 1} 页">
+            <div class="page-label">第 ${i + 1} 页</div>
+        `;
+        card.addEventListener('click', () => {
+            switchMultiPreviewMode('carousel');
+            multiPreviewCurrentIndex = i;
+            renderCarouselPage();
+            renderCarouselThumbnails();
+        });
+        grid.appendChild(card);
+    });
+}
+
+function renderCarouselPage() {
+    const viewport = document.getElementById('carouselViewport');
+    if (!viewport || multiPreviewPages.length === 0) return;
+    const dataUrl = multiPreviewPages[multiPreviewCurrentIndex];
+    viewport.innerHTML = `<img src="${dataUrl}" alt="第 ${multiPreviewCurrentIndex + 1} 页">`;
+    // 更新缩略图高亮
+    document.querySelectorAll('.carousel-thumb').forEach((t, i) => {
+        t.classList.toggle('active', i === multiPreviewCurrentIndex);
+    });
+}
+
+function renderCarouselThumbnails() {
+    const container = document.getElementById('carouselThumbnails');
+    if (!container) return;
+    container.innerHTML = '';
+    multiPreviewPages.forEach((dataUrl, i) => {
+        const thumb = document.createElement('img');
+        thumb.className = 'carousel-thumb' + (i === multiPreviewCurrentIndex ? ' active' : '');
+        thumb.src = dataUrl;
+        thumb.alt = `第 ${i + 1} 页`;
+        thumb.addEventListener('click', () => {
+            multiPreviewCurrentIndex = i;
+            renderCarouselPage();
+        });
+        container.appendChild(thumb);
+    });
+}
+
+function navigateCarousel(direction) {
+    if (multiPreviewPages.length === 0) return;
+    multiPreviewCurrentIndex += direction;
+    if (multiPreviewCurrentIndex < 0) multiPreviewCurrentIndex = multiPreviewPages.length - 1;
+    if (multiPreviewCurrentIndex >= multiPreviewPages.length) multiPreviewCurrentIndex = 0;
+    renderCarouselPage();
+}
+
+function setupMultiPreview() {
+    document.getElementById('multiPreviewBtn')?.addEventListener('click', openMultiPreview);
+    document.getElementById('closeMultiPreview')?.addEventListener('click', closeMultiPreview);
+    document.getElementById('gridViewBtn')?.addEventListener('click', () => switchMultiPreviewMode('grid'));
+    document.getElementById('carouselViewBtn')?.addEventListener('click', () => switchMultiPreviewMode('carousel'));
+    document.getElementById('carouselPrev')?.addEventListener('click', () => navigateCarousel(-1));
+    document.getElementById('carouselNext')?.addEventListener('click', () => navigateCarousel(1));
+}
+
 // ===== 工具函数 =====
 
 /**
@@ -766,8 +1472,6 @@ const lineNumbersEl = document.querySelector('.line-numbers');
 const posterContent = document.getElementById('posterContent');
 const markdownPoster = document.getElementById('markdownPoster');
 const previewContent = document.getElementById('previewContent');
-const backgroundPanel = document.getElementById('backgroundPanel');
-const layoutPanel = document.getElementById('layoutPanel');
 const overlay = document.getElementById('overlay');
 const zoomLevel = document.querySelector('.zoom-level');
 
@@ -832,22 +1536,22 @@ function initializeApp() {
     marked.setOptions({
         breaks: true,
         gfm: true,
-        // 安全性：启用 HTML 清理以防止 XSS 攻击
-        // 注意：marked 的 sanitize 在新版本中已废弃，建议使用 DOMPurify
-        // 这里保持 false 以支持自定义 HTML，但在实际渲染时应手动清理
         sanitize: false,
         highlight: function (code, lang) {
             return code;
         }
     });
 
-    // 设置初始背景
-    applyBackground(backgroundPresets[currentBackground]);
+    // 加载持久化配置
+    loadConfig();
 
-    // 应用初始设置
-    applyFontSize(currentFontSize);
-    applyPadding(currentPadding);
-    applyWidth(currentWidth);
+    // 同步配置到全局变量（兼容旧代码）
+    currentFontSize = MadopicConfig.layout.fontSize;
+    currentPadding = MadopicConfig.layout.padding;
+    currentWidth = MadopicConfig.layout.width;
+
+    // 应用所有配置到预览区
+    applyAllConfig();
 
     // 初始化图表渲染器主题
     diagramRenderer.setTheme('default');
@@ -862,7 +1566,6 @@ function initializeApp() {
 // 设置事件监听器
 function setupEventListeners() {
     // Markdown 输入监听
-    // 更平滑的输入预览：稍延长防抖并在输入结束时仅渲染一次
     markdownInput.addEventListener('input', debounce(updatePreview, 250));
     markdownInput.addEventListener('input', updateLineNumbers);
     markdownInput.addEventListener('scroll', syncLineNumbersScroll);
@@ -874,30 +1577,20 @@ function setupEventListeners() {
     document.getElementById('zoomIn').addEventListener('click', zoomIn);
     document.getElementById('zoomOut').addEventListener('click', zoomOut);
 
-    // 背景设置面板
-    document.getElementById('backgroundBtn').addEventListener('click', openBackgroundPanel);
-    document.getElementById('cancelBackground').addEventListener('click', closeBackgroundPanel);
-    document.getElementById('applyBackground').addEventListener('click', applyBackgroundSettings);
+    // 设置侧边栏
+    setupSettingsSidebar();
 
-    // 文字布局设置面板
-    document.getElementById('layoutBtn').addEventListener('click', openLayoutPanel);
-    document.getElementById('cancelLayout').addEventListener('click', closeLayoutPanel);
-    document.getElementById('applyLayout').addEventListener('click', applyLayoutSettings);
+    // 多图预览
+    setupMultiPreview();
 
-    overlay.addEventListener('click', closeAllPanels);
-
-    // 滑块事件监听
-    setupSliders();
+    // 遮罩层点击关闭
+    overlay.addEventListener('click', () => {
+        closeSettingsSidebar();
+    });
 
     // 导出功能
     setupExportButtons();
     setupModeButtons();
-
-    // 背景预设选择
-    setupBackgroundPresets();
-
-    // 自定义颜色输入
-    setupColorInputs();
 
     // 图片处理
     setupImageHandlers();
@@ -1163,7 +1856,7 @@ async function updatePreview() {
     posterContent.style.display = 'block';
 
     // 重新应用当前的字体大小设置
-    applyFontSize(currentFontSize);
+    applyFontSize(MadopicConfig.layout.fontSize);
 
     // 仅首次渲染使用淡入动画，后续输入不再触发，避免屏闪
     if (!hasInitialPreviewRendered) {
@@ -1276,110 +1969,13 @@ function updateZoomDisplay() {
     zoomLevel.textContent = `${currentZoom}%`;
 }
 
-// 背景设置面板
-function openBackgroundPanel() {
-    backgroundPanel.classList.add('active');
-    overlay.classList.add('active');
-    document.body.style.overflow = 'hidden';
-}
-
-function closeBackgroundPanel() {
-    backgroundPanel.classList.remove('active');
-    overlay.classList.remove('active');
-    document.body.style.overflow = '';
-}
-
-// 文字布局设置面板
-function openLayoutPanel() {
-    layoutPanel.classList.add('active');
-    overlay.classList.add('active');
-    document.body.style.overflow = 'hidden';
-}
-
-function closeLayoutPanel() {
-    layoutPanel.classList.remove('active');
-    overlay.classList.remove('active');
-    document.body.style.overflow = '';
-}
-
-// 关闭所有面板
-function closeAllPanels() {
-    backgroundPanel.classList.remove('active');
-    layoutPanel.classList.remove('active');
-    overlay.classList.remove('active');
-    document.body.style.overflow = '';
-}
-
-function setupBackgroundPresets() {
-    document.querySelectorAll('.bg-preset').forEach(preset => {
-        preset.addEventListener('click', function () {
-            // 移除其他选中状态
-            document.querySelectorAll('.bg-preset').forEach(p => p.classList.remove('active'));
-            // 添加选中状态
-            this.classList.add('active');
-            currentBackground = this.getAttribute('data-bg');
-        });
-    });
-}
-
-function setupColorInputs() {
-    const colorStart = document.getElementById('colorStart');
-    const colorEnd = document.getElementById('colorEnd');
-    const gradientDirection = document.getElementById('gradientDirection');
-
-    [colorStart, colorEnd, gradientDirection].forEach(input => {
-        input.addEventListener('change', function () {
-            // 取消预设选择
-            document.querySelectorAll('.bg-preset').forEach(p => p.classList.remove('active'));
-            currentBackground = 'custom';
-        });
-    });
-}
-
-function applyBackgroundSettings() {
-    // 应用背景设置
-    let backgroundCSS;
-    if (currentBackground === 'custom') {
-        const colorStart = document.getElementById('colorStart').value;
-        const colorEnd = document.getElementById('colorEnd').value;
-        const direction = document.getElementById('gradientDirection').value;
-        backgroundCSS = `linear-gradient(${direction}, ${colorStart} 0%, ${colorEnd} 100%)`;
-    } else {
-        backgroundCSS = backgroundPresets[currentBackground];
-    }
-    applyBackground(backgroundCSS);
-
-    closeBackgroundPanel();
-
-    // 显示成功提示
-    showNotification('背景设置已更新！', 'success');
-}
-
-function applyLayoutSettings() {
-    // 应用字体大小设置
-    currentFontSize = parseFloat(document.getElementById('fontSizeSlider').value);
-    applyFontSize(currentFontSize);
-
-    // 应用边距设置
-    currentPadding = parseFloat(document.getElementById('paddingSlider').value);
-    applyPadding(currentPadding);
-
-    // 应用宽度设置
-    currentWidth = parseInt(document.getElementById('widthSlider').value);
-    applyWidth(currentWidth);
-
-    closeLayoutPanel();
-
-    // 显示成功提示
-    showNotification('文字布局设置已更新！', 'success');
-}
+// ===== 底层样式应用函数（被新的配置系统调用） =====
 
 function applyBackground(backgroundCSS) {
     markdownPoster.style.background = backgroundCSS;
 }
 
 function applyFontSize(fontSize) {
-    // 使用CSS变量统一管理字体大小，避免大量DOM操作
     posterContent.style.setProperty('--dynamic-font-size', `${fontSize}px`);
     posterContent.style.setProperty('--dynamic-h1-size', `${Math.round(fontSize * 1.75)}px`);
     posterContent.style.setProperty('--dynamic-h2-size', `${Math.round(fontSize * 1.375)}px`);
@@ -1391,51 +1987,11 @@ function applyFontSize(fontSize) {
 }
 
 function applyPadding(padding) {
-    // 调整外层容器的内边距，即图片中红色箭头指向的边距
     markdownPoster.style.padding = `${padding}px`;
 }
 
 function applyWidth(width) {
-    // 调整预览区的整体宽度（导出图片的宽度）
     markdownPoster.style.width = `${width}px`;
-}
-
-function setupSliders() {
-    const fontSizeSlider = document.getElementById('fontSizeSlider');
-    const fontSizeValue = document.getElementById('fontSizeValue');
-    const paddingSlider = document.getElementById('paddingSlider');
-    const paddingValue = document.getElementById('paddingValue');
-    const widthSlider = document.getElementById('widthSlider');
-    const widthValue = document.getElementById('widthValue');
-
-    // 字体大小滑块
-    fontSizeSlider.addEventListener('input', function () {
-        const value = parseFloat(this.value);
-        fontSizeValue.textContent = `${value}px`;
-        // 实时预览
-        applyFontSize(value);
-    });
-
-    // 边距滑块
-    paddingSlider.addEventListener('input', function () {
-        const value = parseFloat(this.value);
-        paddingValue.textContent = `${value}px`;
-        // 实时预览
-        applyPadding(value);
-    });
-
-    // 宽度滑块
-    widthSlider.addEventListener('input', function () {
-        const value = this.value;
-        widthValue.textContent = `${value}px`;
-        // 实时预览
-        applyWidth(parseInt(value));
-    });
-
-    // 初始化滑块值显示
-    fontSizeValue.textContent = `${fontSizeSlider.value}px`;
-    paddingValue.textContent = `${paddingSlider.value}px`;
-    widthValue.textContent = `${widthSlider.value}px`;
 }
 
 
@@ -2257,7 +2813,8 @@ function setupKeyboardShortcuts() {
 
         // ESC 键关闭面板
         if (e.key === 'Escape') {
-            closeCustomPanel();
+            closeSettingsSidebar();
+            closeMultiPreview();
         }
     });
 }
@@ -2964,11 +3521,33 @@ async function splitMarkdownIntoPages(markdown, maxPageHeight, containerWidth, p
     const blocks = splitMarkdownIntoAtomicBlocks(markdown);
     if (blocks.length === 0) return [markdown];
 
-    // 页眉高度预留（头像 36px + padding-top 14px + padding-bottom 10px）
-    const headerHeight = 60;
-    // 安全边距，防止渲染微差导致底部被裁切
+    // 从配置计算页眉高度
+    const hCfg = MadopicConfig.header;
+    const headerHeight = hCfg.enabled ? (36 + hCfg.paddingTop + hCfg.paddingBottom) : 0;
+    // 从配置计算页脚高度
+    const fCfg = MadopicConfig.footer;
+    const footerHeight = fCfg.enabled ? (fCfg.fontSize + 4 + fCfg.paddingTop + fCfg.paddingBottom) : 0;
+
+    // 【关键修复】poster 外层有 padding（用户可调），实际可用于内容的高度需要扣除上下 padding。
+    // maxPageHeight 是 poster 的 box-sizing:border-box 总高度，
+    // 内部可用高度 = maxPageHeight - posterPaddingTop - posterPaddingBottom。
+    // 设计决策：此处读取 markdownPoster 的 computed padding，确保与导出节点一致。
+    const mpComputed = getComputedStyle(markdownPoster);
+    const posterPaddingTop = parseFloat(mpComputed.paddingTop) || 0;
+    const posterPaddingBottom = parseFloat(mpComputed.paddingBottom) || 0;
+
+    // 安全边距
     const safetyMargin = 8;
-    const availableHeight = maxPageHeight - headerHeight - safetyMargin;
+    const availableHeight = maxPageHeight - posterPaddingTop - posterPaddingBottom - headerHeight - footerHeight - safetyMargin;
+
+    // 【关键修复】测量容器宽度应与导出节点中 .poster-content 的实际宽度一致。
+    // 导出节点：poster(width=containerWidth, padding=posterPadding, box-sizing:border-box)
+    //   → 内部空间 = containerWidth - 2 * posterPadding
+    // .poster-content 在这个内部空间中，自身 CSS padding=48px 由 measureMarkdownHeight 内部硬编码。
+    // 因此测量容器宽度 = containerWidth - 2 * posterPadding（poster 外层 padding 吃掉的宽度）
+    const posterPaddingLeft = parseFloat(mpComputed.paddingLeft) || 0;
+    const posterPaddingRight = parseFloat(mpComputed.paddingRight) || 0;
+    const measureWidth = containerWidth - posterPaddingLeft - posterPaddingRight;
 
     const pages = [];
     let currentPageBlocks = [];
@@ -2980,7 +3559,7 @@ async function splitMarkdownIntoPages(markdown, maxPageHeight, containerWidth, p
             ? currentPageMarkdown + '\n\n' + block
             : block;
 
-        const height = await measureMarkdownHeight(testMarkdown, containerWidth, padding, fontSize);
+        const height = await measureMarkdownHeight(testMarkdown, measureWidth, padding, fontSize);
 
         if (height > availableHeight && currentPageBlocks.length > 0) {
             // 当前页已满，将已有内容保存为一页
@@ -3006,6 +3585,9 @@ async function splitMarkdownIntoPages(markdown, maxPageHeight, containerWidth, p
  * 调用方负责在使用后移除节点。
  */
 async function createPageExportNode(markdownText, pageIndex, totalPages) {
+    const hCfg = MadopicConfig.header;
+    const fCfg = MadopicConfig.footer;
+    const bgCfg = MadopicConfig.background;
     // 创建外层容器（对应 markdownPoster）
     const poster = document.createElement('div');
     poster.id = `madopic-export-poster-page-${pageIndex}`;
@@ -3022,37 +3604,61 @@ async function createPageExportNode(markdownText, pageIndex, totalPages) {
         background: markdownPoster.style.background || mpComputed.background,
         transform: 'none',
         overflow: 'hidden',
-        borderRadius: '0'
+        borderRadius: '0',
+        display: 'flex',
+        flexDirection: 'column'
     });
 
-    // 页眉
-    const header = document.createElement('div');
-    header.className = 'poster-header';
-    const avatarImg = document.createElement('img');
-    avatarImg.src = document.querySelector('.poster-header .header-avatar')?.src || 'Portrait.png';
-    avatarImg.className = 'header-avatar';
-    avatarImg.setAttribute('crossorigin', 'anonymous');
-    const nameSpan = document.createElement('span');
-    nameSpan.className = 'header-name';
-    nameSpan.textContent = 'MoonlitClear';
-    header.appendChild(avatarImg);
-    header.appendChild(nameSpan);
-
-    // 如果有多页，添加页码
-    if (totalPages > 1) {
-        const pageNum = document.createElement('span');
-        pageNum.style.cssText = 'margin-left: auto; font-size: 12px; color: #878787; font-weight: 400;';
-        pageNum.textContent = `${pageIndex + 1} / ${totalPages}`;
-        header.appendChild(pageNum);
+    // 背景图层（如果是背景图模式）
+    if (bgCfg.type === 'image' && bgCfg.imageData) {
+        const bgLayer = document.createElement('div');
+        bgLayer.className = 'poster-bg-image';
+        bgLayer.style.backgroundImage = `url(${bgCfg.imageData})`;
+        bgLayer.style.filter = `blur(${bgCfg.imageBlur}px)`;
+        bgLayer.style.opacity = bgCfg.imageOpacity;
+        const expand = Math.max(bgCfg.imageBlur * 2, 20);
+        bgLayer.style.top = `-${expand}px`;
+        bgLayer.style.left = `-${expand}px`;
+        bgLayer.style.right = `-${expand}px`;
+        bgLayer.style.bottom = `-${expand}px`;
+        poster.appendChild(bgLayer);
     }
 
-    poster.appendChild(header);
+    // 页眉
+    if (hCfg.enabled) {
+        const header = document.createElement('div');
+        header.className = 'poster-header';
+        header.style.paddingTop = hCfg.paddingTop + 'px';
+        header.style.paddingBottom = hCfg.paddingBottom + 'px';
+        const avatarImg = document.createElement('img');
+        avatarImg.src = hCfg.avatar || 'Portrait.png';
+        avatarImg.className = 'header-avatar';
+        avatarImg.setAttribute('crossorigin', 'anonymous');
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'header-name';
+        nameSpan.textContent = hCfg.name;
+        nameSpan.style.color = hCfg.nameColor;
+        header.appendChild(avatarImg);
+        header.appendChild(nameSpan);
+
+        // 页码
+        if (hCfg.showPageNumber && totalPages > 1) {
+            const pageNum = document.createElement('span');
+            pageNum.style.cssText = `margin-left: auto; font-size: 12px; color: ${hCfg.pageNumberColor}; font-weight: 400;`;
+            pageNum.textContent = `${pageIndex + 1} / ${totalPages}`;
+            header.appendChild(pageNum);
+        }
+        poster.appendChild(header);
+    }
 
     // 内容区
     const content = document.createElement('div');
     content.className = 'poster-content';
     content.style.minHeight = '0';
     content.style.animation = 'none';
+    // 内容区自动填充 header 和 footer 之间的空间
+    content.style.flex = '1';
+    content.style.overflow = 'hidden';
 
     // 同步字体大小 CSS 变量
     content.style.setProperty('--dynamic-font-size', `${currentFontSize}px`);
@@ -3081,6 +3687,46 @@ async function createPageExportNode(markdownText, pageIndex, totalPages) {
     content.innerHTML = html;
 
     poster.appendChild(content);
+
+    // 页脚
+    if (fCfg.enabled) {
+        const footer = document.createElement('div');
+        footer.className = 'poster-footer';
+        footer.style.cssText = `
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: ${fCfg.paddingTop}px 48px ${fCfg.paddingBottom}px 48px;
+            flex-shrink: 0;
+            gap: 8px;
+        `;
+
+        if (fCfg.showDivider) {
+            const lineLeft = document.createElement('span');
+            lineLeft.style.cssText = `flex: 1; height: 1px; background: linear-gradient(to left, ${hexToRgba(fCfg.dividerColor, 0.3)}, transparent);`;
+            footer.appendChild(lineLeft);
+        }
+
+        const sloganText = document.createElement('span');
+        sloganText.textContent = fCfg.text;
+        sloganText.style.cssText = `
+            font-size: ${fCfg.fontSize}px;
+            color: ${fCfg.textColor};
+            letter-spacing: ${fCfg.letterSpacing * 0.1}em;
+            white-space: nowrap;
+            font-weight: 400;
+        `;
+        footer.appendChild(sloganText);
+
+        if (fCfg.showDivider) {
+            const lineRight = document.createElement('span');
+            lineRight.style.cssText = `flex: 1; height: 1px; background: linear-gradient(to right, ${hexToRgba(fCfg.dividerColor, 0.3)}, transparent);`;
+            footer.appendChild(lineRight);
+        }
+
+        poster.appendChild(footer);
+    }
+
     document.body.appendChild(poster);
 
     // 渲染特殊元素
@@ -3245,6 +3891,14 @@ window.MadopicApp = {
     insertImage,
     handleImageFile,
     getCurrentMadopicConfig,
+    MadopicConfig,
+    saveConfig,
+    loadConfig,
+    applyAllConfig,
+    openSettingsSidebar,
+    closeSettingsSidebar,
+    openMultiPreview,
+    closeMultiPreview,
     mathRenderer,
     diagramRenderer,
     echartsRenderer,
