@@ -1251,8 +1251,7 @@ select {
     justify-content: center;
     align-items: center;
     padding: 24px 60px;
-    overflow: hidden;
-    box-sizing: border-box;
+    overflow: auto;
 }
 
 .carousel-viewport img,
@@ -2304,8 +2303,7 @@ select {
 .multi-preview-container {
     flex: 1;
     min-height: 0;
-    overflow-y: auto;
-    overflow-x: hidden; /* 防止水平溢出导致内容偏移 */
+    overflow: auto;
     background: var(--background-secondary);
     display: flex;
     flex-direction: column;
@@ -2403,8 +2401,6 @@ select {
     min-height: 0;
     width: 100%;
     overflow: hidden;
-    padding: 0 48px; /* 为左右导航按钮留出对称空间 */
-    box-sizing: border-box;
 }
 
 .carousel-viewport img {
