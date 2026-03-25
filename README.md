@@ -1,6 +1,6 @@
-# Madopic
+# mkd2pic
 
-> Madopic (Markdown to Picture) — 精美的 Markdown 转图片工具 ✨
+> mkd2pic (Markdown to Picture) — 精美的 Markdown 转图片工具 ✨
 
 ![alt text](image.png)
 
@@ -116,7 +116,7 @@ npx live-server --port=8080
 ## 📁 项目结构
 
 ```
-madopic/
+mkd2pic/
 ├── index.html          # 主页面
 ├── style.css           # 样式（Notion/Linear 极简风格）
 ├── script.js           # 核心逻辑（渲染、分页、导出、设置）
@@ -190,4 +190,4 @@ madopic/
 
 ---
 
-**Madopic** — 让你的文字更有画面感 🎨✨
+**mkd2pic** — 让你的文字更有画面感 🎨✨
