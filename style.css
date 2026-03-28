@@ -759,6 +759,19 @@ body {
     white-space: nowrap;
 }
 
+/* 存为 MCP 配置按钮 */
+#saveMcpConfigBtn {
+    font-size: 12px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    opacity: 0.85;
+}
+#saveMcpConfigBtn:hover {
+    opacity: 1;
+}
+
 #renderBtn i {
     transition: transform 0.3s ease;
 }
@@ -1251,7 +1264,8 @@ select {
     justify-content: center;
     align-items: center;
     padding: 24px 60px;
-    overflow: auto;
+    overflow: hidden;
+    box-sizing: border-box;
 }
 
 .carousel-viewport img,
@@ -2303,7 +2317,8 @@ select {
 .multi-preview-container {
     flex: 1;
     min-height: 0;
-    overflow: auto;
+    overflow-y: auto;
+    overflow-x: hidden; /* 防止水平溢出导致内容偏移 */
     background: var(--background-secondary);
     display: flex;
     flex-direction: column;
@@ -2401,6 +2416,8 @@ select {
     min-height: 0;
     width: 100%;
     overflow: hidden;
+    padding: 0 48px; /* 为左右导航按钮留出对称空间 */
+    box-sizing: border-box;
 }
 
 .carousel-viewport img {

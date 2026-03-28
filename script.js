@@ -433,6 +433,9 @@ function setupSettingsSidebar() {
     // 渲染按钮 — 手动触发预览刷新
     document.getElementById('renderBtn')?.addEventListener('click', manualRender);
 
+    // 存为 MCP 配置按钮
+    document.getElementById('saveMcpConfigBtn')?.addEventListener('click', saveMcpConfig);
+
     setupCoverControls();
     setupHeaderControls();
     setupFooterControls();
@@ -4510,6 +4513,132 @@ async function exportToMultiPNG() {
     } catch (error) {
         console.error('多图导出失败:', error);
         showNotification('多图导出失败，请重试', 'error');
+    }
+}
+
+// ──────────────────────────────────────────────────────────────
+// 保存 MCP 配置（File System Access API）
+// ──────────────────────────────────────────────────────────────
+
+/**
+ * 将当前 MadopicConfig 中的样式预设（不含封面标题/内容）序列化为
+ * madopic_config.json 格式，通过文件保存对话框写入本地文件。
+ *
+ * 说明：
+ * - 封面的 title/subtitle 是运行时参数，不写入预设
+ * - 背景 imageData（Base64）体积过大，不写入预设
+ */
+async function saveMcpConfig() {
+    if (!window.showSaveFilePicker) {
+        showNotification('当前浏览器不支持文件写入（需 Chrome 86+），请升级浏览器', 'error');
+        return;
+    }
+
+    const cfg = MadopicConfig;
+
+    // 构造要写入的配置对象（过滤运行时内容字段）
+    const output = {
+        _comment: 'madopic MCP 服务配置文件 — 预设样式，运行时参数通过工具调用传入',
+        _version: '1.0.0',
+
+        output: {
+            default_dir: '~/Downloads/madopic-exports',
+            _comment: '导出目录，支持 ~ 展开。不同设备可修改此项后重启 MCP 生效。',
+        },
+
+        export: {
+            default_format: 'xhs',
+            _format_options: 'xhs（小红书 3:4）| pyq（朋友圈 9:16）| free（自由比例）',
+            default_mode: 'multi',
+            _mode_options: 'multi（多图导出，ZIP）| single（单图/长图，PNG）| pdf（PDF）',
+        },
+
+        cover: {
+            enabled: cfg.cover.enabled,
+            titleFontSize: cfg.cover.titleFontSize,
+            subtitleFontSize: cfg.cover.subtitleFontSize,
+            titleColor: cfg.cover.titleColor,
+            subtitleColor: cfg.cover.subtitleColor,
+            titleWeight: cfg.cover.titleWeight,
+            subtitleWeight: cfg.cover.subtitleWeight,
+            fontFamily: cfg.cover.fontFamily,
+            _fontFamily_options: 'system | serif | mono | hei',
+            textEffect: cfg.cover.textEffect,
+            _textEffect_options: 'none | stroke | shadow | gradient | neon | emboss',
+            layout: cfg.cover.layout,
+            _layout_options: 'center | top | bottom',
+            gap: cfg.cover.gap,
+            showHeader: cfg.cover.showHeader,
+            showFooter: cfg.cover.showFooter,
+        },
+
+        header: {
+            enabled: cfg.header.enabled,
+            name: cfg.header.name,
+            nameColor: cfg.header.nameColor,
+            paddingTop: cfg.header.paddingTop,
+            paddingBottom: cfg.header.paddingBottom,
+            showPageNumber: cfg.header.showPageNumber,
+            pageNumberColor: cfg.header.pageNumberColor,
+            // avatar 不写入（Base64 太大，MCP 侧自行处理）
+        },
+
+        footer: {
+            enabled: cfg.footer.enabled,
+            text: cfg.footer.text,
+            textColor: cfg.footer.textColor,
+            fontSize: cfg.footer.fontSize,
+            letterSpacing: cfg.footer.letterSpacing,
+            paddingTop: cfg.footer.paddingTop,
+            paddingBottom: cfg.footer.paddingBottom,
+            showDivider: cfg.footer.showDivider,
+            dividerColor: cfg.footer.dividerColor,
+        },
+
+        background: {
+            type: cfg.background.type,
+            _type_options: 'gradient | solid | image',
+            preset: cfg.background.preset,
+            _preset_options: 'gradient1 ~ gradient8 | custom',
+            customStartColor: cfg.background.customStartColor,
+            customEndColor: cfg.background.customEndColor,
+            gradientDirection: cfg.background.gradientDirection,
+            solidColor: cfg.background.solidColor,
+            // imageData 不写入（体积过大）
+            imageBlur: cfg.background.imageBlur,
+            imageOpacity: cfg.background.imageOpacity,
+        },
+
+        layout: {
+            fontSize: cfg.layout.fontSize,
+            _fontSize_range: '14~22',
+            width: cfg.layout.width,
+            _width_range: '480~800',
+            padding: cfg.layout.padding,
+            _padding_range: '20~60',
+        },
+    };
+
+    const jsonStr = JSON.stringify(output, null, 2);
+
+    try {
+        const fileHandle = await window.showSaveFilePicker({
+            suggestedName: 'madopic_config.json',
+            startIn: 'documents',
+            types: [{
+                description: 'JSON 配置文件',
+                accept: { 'application/json': ['.json'] },
+            }],
+        });
+        const writable = await fileHandle.createWritable();
+        await writable.write(jsonStr);
+        await writable.close();
+
+        showNotification('✅ MCP 配置已保存！MCP 服务重启后生效', 'success');
+    } catch (err) {
+        if (err.name === 'AbortError') return; // 用户取消，不提示
+        console.error('saveMcpConfig error:', err);
+        showNotification(`保存失败: ${err.message}`, 'error');
     }
 }
 
