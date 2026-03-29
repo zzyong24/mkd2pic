@@ -1,28 +1,25 @@
 {
   "_comment": "madopic MCP 服务配置文件 — 预设样式，运行时参数通过工具调用传入",
   "_version": "1.0.0",
-
   "output": {
     "default_dir": "~/Downloads/madopic-exports",
     "_comment": "导出目录，支持 ~ 展开。不同设备可修改此项后重启 MCP 生效。"
   },
-
   "export": {
     "default_format": "xhs",
     "_format_options": "xhs（小红书 3:4）| pyq（朋友圈 9:16）| free（自由比例）",
     "default_mode": "multi",
     "_mode_options": "multi（多图导出，ZIP）| single（单图/长图，PNG）| pdf（PDF）"
   },
-
   "cover": {
     "enabled": true,
-    "titleFontSize": 48,
-    "subtitleFontSize": 22,
+    "titleFontSize": 55,
+    "subtitleFontSize": 21,
     "titleColor": "#1a1a2e",
     "subtitleColor": "#525252",
-    "titleWeight": "700",
-    "subtitleWeight": "400",
-    "fontFamily": "system",
+    "titleWeight": "900",
+    "subtitleWeight": "600",
+    "fontFamily": "hei",
     "_fontFamily_options": "system | serif | mono | hei",
     "textEffect": "none",
     "_textEffect_options": "none | stroke | shadow | gradient | neon | emboss",
@@ -32,46 +29,44 @@
     "showHeader": true,
     "showFooter": true
   },
-
   "header": {
     "enabled": true,
     "name": "MoonlitClear",
     "nameColor": "#1a1a2e",
-    "paddingTop": 14,
-    "paddingBottom": 10,
+    "paddingTop": 4,
+    "paddingBottom": 4,
     "showPageNumber": true,
     "pageNumberColor": "#878787"
   },
-
   "footer": {
     "enabled": true,
     "text": "AI为基，认知破界",
-    "textColor": "#878787",
-    "fontSize": 12,
+    "textColor": "#161817",
+    "fontSize": 13,
     "letterSpacing": 1,
-    "paddingTop": 14,
-    "paddingBottom": 18,
+    "paddingTop": 2,
+    "paddingBottom": 2,
     "showDivider": true,
     "dividerColor": "#787878"
   },
-
   "background": {
     "type": "gradient",
     "_type_options": "gradient | solid | image",
-    "preset": "gradient1",
+    "preset": "gradient3",
     "_preset_options": "gradient1 ~ gradient8 | custom",
     "customStartColor": "#667eea",
     "customEndColor": "#764ba2",
     "gradientDirection": "135deg",
-    "solidColor": "#f5f5f5"
+    "solidColor": "#f5f5f5",
+    "imageBlur": 12,
+    "imageOpacity": 0.3
   },
-
   "layout": {
-    "fontSize": 18,
+    "fontSize": 14,
     "_fontSize_range": "14~22",
     "width": 640,
     "_width_range": "480~800",
-    "padding": 40,
+    "padding": 20,
     "_padding_range": "20~60"
   }
 }

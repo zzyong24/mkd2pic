@@ -130,7 +130,7 @@ function deepMerge(target, source) {
     return target;
 }
 
-/** 保存配置到 localStorage */
+/** 保存配置到 localStorage，并自动同步到服务器（如可用） */
 function saveConfig() {
     try {
         localStorage.setItem(CONFIG_KEY, JSON.stringify(MadopicConfig));
@@ -139,6 +139,8 @@ function saveConfig() {
     }
     // 配置变更后标记需要重新渲染（不再自动触发，由用户点击「渲染」按钮手动触发）
     _markRenderDirty();
+    // 自动同步到服务器（debounced）
+    _syncConfigToServer();
 }
 
 /** 从 localStorage 加载配置 */
@@ -153,6 +155,142 @@ function loadConfig() {
         console.warn('加载配置失败:', e);
     }
 }
+
+// ===== 本地服务器配置同步 =====
+
+/** 是否检测到本地服务器（server.py）可用 */
+let _serverAvailable = false;
+
+/** 检测本地服务器是否可用，并从 API 拉取最新配置 */
+async function detectAndLoadServerConfig() {
+    try {
+        const resp = await fetch('/api/config', { method: 'GET' });
+        if (!resp.ok) return;
+        const serverCfg = await resp.json();
+        _serverAvailable = true;
+        console.log('[mkd2pic] 本地服务器已连接，配置已同步');
+        // 将服务器配置合并到 MadopicConfig（服务器优先）
+        if (serverCfg && typeof serverCfg === 'object') {
+            // 只合并样式相关字段（与 saveMcpConfig 写入的字段对齐）
+            const styleKeys = ['cover', 'header', 'footer', 'background', 'layout'];
+            for (const key of styleKeys) {
+                if (serverCfg[key] && typeof serverCfg[key] === 'object') {
+                    if (!MadopicConfig[key]) MadopicConfig[key] = {};
+                    deepMerge(MadopicConfig[key], serverCfg[key]);
+                }
+            }
+            // 同步到 localStorage
+            try {
+                localStorage.setItem(CONFIG_KEY, JSON.stringify(MadopicConfig));
+            } catch (_) { /* ignore */ }
+        }
+    } catch (_) {
+        // fetch 失败 = 无服务器（file:// 协议或其他 HTTP 服务器），静默
+        _serverAvailable = false;
+    }
+}
+
+/**
+ * 构造要同步到服务器的配置对象（排除运行时字段）
+ * 与 saveMcpConfig() 中构造的 output 对象保持一致
+ */
+function _buildServerConfigPayload() {
+    const cfg = MadopicConfig;
+    return {
+        _comment: 'madopic MCP 服务配置文件 — 预设样式，运行时参数通过工具调用传入',
+        _version: '1.0.0',
+
+        output: {
+            default_dir: '~/Downloads/madopic-exports',
+            _comment: '导出目录，支持 ~ 展开。不同设备可修改此项后重启 MCP 生效。',
+        },
+
+        export: {
+            default_format: 'xhs',
+            _format_options: 'xhs（小红书 3:4）| pyq（朋友圈 9:16）| free（自由比例）',
+            default_mode: 'multi',
+            _mode_options: 'multi（多图导出，ZIP）| single（单图/长图，PNG）| pdf（PDF）',
+        },
+
+        cover: {
+            enabled: cfg.cover.enabled,
+            titleFontSize: cfg.cover.titleFontSize,
+            subtitleFontSize: cfg.cover.subtitleFontSize,
+            titleColor: cfg.cover.titleColor,
+            subtitleColor: cfg.cover.subtitleColor,
+            titleWeight: cfg.cover.titleWeight,
+            subtitleWeight: cfg.cover.subtitleWeight,
+            fontFamily: cfg.cover.fontFamily,
+            _fontFamily_options: 'system | serif | mono | hei',
+            textEffect: cfg.cover.textEffect,
+            _textEffect_options: 'none | stroke | shadow | gradient | neon | emboss',
+            layout: cfg.cover.layout,
+            _layout_options: 'center | top | bottom',
+            gap: cfg.cover.gap,
+            showHeader: cfg.cover.showHeader,
+            showFooter: cfg.cover.showFooter,
+        },
+
+        header: {
+            enabled: cfg.header.enabled,
+            name: cfg.header.name,
+            nameColor: cfg.header.nameColor,
+            paddingTop: cfg.header.paddingTop,
+            paddingBottom: cfg.header.paddingBottom,
+            showPageNumber: cfg.header.showPageNumber,
+            pageNumberColor: cfg.header.pageNumberColor,
+        },
+
+        footer: {
+            enabled: cfg.footer.enabled,
+            text: cfg.footer.text,
+            textColor: cfg.footer.textColor,
+            fontSize: cfg.footer.fontSize,
+            letterSpacing: cfg.footer.letterSpacing,
+            paddingTop: cfg.footer.paddingTop,
+            paddingBottom: cfg.footer.paddingBottom,
+            showDivider: cfg.footer.showDivider,
+            dividerColor: cfg.footer.dividerColor,
+        },
+
+        background: {
+            type: cfg.background.type,
+            _type_options: 'gradient | solid | image',
+            preset: cfg.background.preset,
+            _preset_options: 'gradient1 ~ gradient8 | custom',
+            customStartColor: cfg.background.customStartColor,
+            customEndColor: cfg.background.customEndColor,
+            gradientDirection: cfg.background.gradientDirection,
+            solidColor: cfg.background.solidColor,
+            imageBlur: cfg.background.imageBlur,
+            imageOpacity: cfg.background.imageOpacity,
+        },
+
+        layout: {
+            fontSize: cfg.layout.fontSize,
+            _fontSize_range: '14~22',
+            width: cfg.layout.width,
+            _width_range: '480~800',
+            padding: cfg.layout.padding,
+            _padding_range: '20~60',
+        },
+    };
+}
+
+/** debounce 后将配置同步到服务器 API */
+const _syncConfigToServer = debounce(function () {
+    if (!_serverAvailable) return;
+    const payload = _buildServerConfigPayload();
+    fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    }).then(resp => {
+        if (!resp.ok) console.warn('[mkd2pic] 配置同步失败:', resp.status);
+    }).catch(err => {
+        console.warn('[mkd2pic] 配置同步失败:', err);
+    });
+}, 500);
 
 // ===== 配置应用函数 =====
 
@@ -1834,7 +1972,7 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 // 初始化应用
-function initializeApp() {
+async function initializeApp() {
     // 配置 marked 选项
     marked.setOptions({
         breaks: true,
@@ -1845,8 +1983,11 @@ function initializeApp() {
         }
     });
 
-    // 加载持久化配置
+    // 加载持久化配置（localStorage 先加载作为基底）
     loadConfig();
+
+    // 尝试从本地服务器加载最新配置（服务器优先）
+    await detectAndLoadServerConfig();
 
     // 同步配置到全局变量（兼容旧代码）
     currentFontSize = MadopicConfig.layout.fontSize;
@@ -4529,95 +4670,35 @@ async function exportToMultiPNG() {
  * - 背景 imageData（Base64）体积过大，不写入预设
  */
 async function saveMcpConfig() {
+    // 如果本地服务器可用，直接通过 API 保存，无需弹文件对话框
+    if (_serverAvailable) {
+        try {
+            const payload = _buildServerConfigPayload();
+            const resp = await fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            if (resp.ok) {
+                showNotification('✅ MCP 配置已自动保存到服务器！', 'success');
+            } else {
+                showNotification(`保存失败: HTTP ${resp.status}`, 'error');
+            }
+        } catch (err) {
+            console.error('saveMcpConfig API error:', err);
+            showNotification(`保存失败: ${err.message}`, 'error');
+        }
+        return;
+    }
+
+    // fallback：无服务器时使用 File System Access API
     if (!window.showSaveFilePicker) {
         showNotification('当前浏览器不支持文件写入（需 Chrome 86+），请升级浏览器', 'error');
         return;
     }
 
-    const cfg = MadopicConfig;
-
     // 构造要写入的配置对象（过滤运行时内容字段）
-    const output = {
-        _comment: 'madopic MCP 服务配置文件 — 预设样式，运行时参数通过工具调用传入',
-        _version: '1.0.0',
-
-        output: {
-            default_dir: '~/Downloads/madopic-exports',
-            _comment: '导出目录，支持 ~ 展开。不同设备可修改此项后重启 MCP 生效。',
-        },
-
-        export: {
-            default_format: 'xhs',
-            _format_options: 'xhs（小红书 3:4）| pyq（朋友圈 9:16）| free（自由比例）',
-            default_mode: 'multi',
-            _mode_options: 'multi（多图导出，ZIP）| single（单图/长图，PNG）| pdf（PDF）',
-        },
-
-        cover: {
-            enabled: cfg.cover.enabled,
-            titleFontSize: cfg.cover.titleFontSize,
-            subtitleFontSize: cfg.cover.subtitleFontSize,
-            titleColor: cfg.cover.titleColor,
-            subtitleColor: cfg.cover.subtitleColor,
-            titleWeight: cfg.cover.titleWeight,
-            subtitleWeight: cfg.cover.subtitleWeight,
-            fontFamily: cfg.cover.fontFamily,
-            _fontFamily_options: 'system | serif | mono | hei',
-            textEffect: cfg.cover.textEffect,
-            _textEffect_options: 'none | stroke | shadow | gradient | neon | emboss',
-            layout: cfg.cover.layout,
-            _layout_options: 'center | top | bottom',
-            gap: cfg.cover.gap,
-            showHeader: cfg.cover.showHeader,
-            showFooter: cfg.cover.showFooter,
-        },
-
-        header: {
-            enabled: cfg.header.enabled,
-            name: cfg.header.name,
-            nameColor: cfg.header.nameColor,
-            paddingTop: cfg.header.paddingTop,
-            paddingBottom: cfg.header.paddingBottom,
-            showPageNumber: cfg.header.showPageNumber,
-            pageNumberColor: cfg.header.pageNumberColor,
-            // avatar 不写入（Base64 太大，MCP 侧自行处理）
-        },
-
-        footer: {
-            enabled: cfg.footer.enabled,
-            text: cfg.footer.text,
-            textColor: cfg.footer.textColor,
-            fontSize: cfg.footer.fontSize,
-            letterSpacing: cfg.footer.letterSpacing,
-            paddingTop: cfg.footer.paddingTop,
-            paddingBottom: cfg.footer.paddingBottom,
-            showDivider: cfg.footer.showDivider,
-            dividerColor: cfg.footer.dividerColor,
-        },
-
-        background: {
-            type: cfg.background.type,
-            _type_options: 'gradient | solid | image',
-            preset: cfg.background.preset,
-            _preset_options: 'gradient1 ~ gradient8 | custom',
-            customStartColor: cfg.background.customStartColor,
-            customEndColor: cfg.background.customEndColor,
-            gradientDirection: cfg.background.gradientDirection,
-            solidColor: cfg.background.solidColor,
-            // imageData 不写入（体积过大）
-            imageBlur: cfg.background.imageBlur,
-            imageOpacity: cfg.background.imageOpacity,
-        },
-
-        layout: {
-            fontSize: cfg.layout.fontSize,
-            _fontSize_range: '14~22',
-            width: cfg.layout.width,
-            _width_range: '480~800',
-            padding: cfg.layout.padding,
-            _padding_range: '20~60',
-        },
-    };
+    const output = _buildServerConfigPayload();
 
     const jsonStr = JSON.stringify(output, null, 2);
 
