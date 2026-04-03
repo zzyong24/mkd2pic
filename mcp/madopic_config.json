@@ -13,7 +13,7 @@
   },
   "cover": {
     "enabled": true,
-    "titleFontSize": 55,
+    "titleFontSize": 60,
     "subtitleFontSize": 21,
     "titleColor": "#1a1a2e",
     "subtitleColor": "#525252",
@@ -52,7 +52,7 @@
   "background": {
     "type": "gradient",
     "_type_options": "gradient | solid | image",
-    "preset": "gradient3",
+    "preset": "gradient6",
     "_preset_options": "gradient1 ~ gradient8 | custom",
     "customStartColor": "#667eea",
     "customEndColor": "#764ba2",
@@ -62,7 +62,7 @@
     "imageOpacity": 0.3
   },
   "layout": {
-    "fontSize": 14,
+    "fontSize": 17.5,
     "_fontSize_range": "14~22",
     "width": 640,
     "_width_range": "480~800",
